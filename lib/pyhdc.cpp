@@ -52,17 +52,13 @@ static int LBV_init(LBV *v, PyObject *args, PyObject *kwds) {
 
 static PyObject *LBV_repr(LBV *v) {
     std::string ret = "";
-    uint8_t *data = (uint8_t *)v->data;
-    for (uint32_t i = 0; i < VECTOR_WIDTH / 8; ++i) {
-        uint8_t byte = data[i];
-        ret += (byte & 0x80 ? '1' : '0');
-        ret += (byte & 0x40 ? '1' : '0');
-        ret += (byte & 0x20 ? '1' : '0');
-        ret += (byte & 0x10 ? '1' : '0');
-        ret += (byte & 0x08 ? '1' : '0');
-        ret += (byte & 0x04 ? '1' : '0');
-        ret += (byte & 0x02 ? '1' : '0');
-        ret += (byte & 0x01 ? '1' : '0');
+    for (uint32_t j = 0; j < VECTOR_WIDTH / BIT_WIDTH; ++j) {
+        const uint32_t chunk = v->data[j];
+        for (uint8_t i = 0; i < BIT_WIDTH; ++i) {
+            const uint32_t bit_src = (chunk >> (BIT_WIDTH - i - 1)) & 0x1;
+            ret += std::to_string(bit_src);
+        }
+        ret += '_';
     }
 
     return PyUnicode_FromFormat(ret.c_str());
@@ -161,17 +157,23 @@ static PyObject *LBV_xor(LBV *v1, PyObject *args) {
     Py_RETURN_NONE;
 }
 
-
 // Permutation
 void permute_chunk(LBV *v, const uint8_t p[][2], uint32_t id, LBV *ref) {
-    uint32_t mask = 0;
-
     for (uint8_t i = 0; i < BIT_WIDTH; ++i) {
         const uint8_t chunk_id = p[id * BIT_WIDTH + i][0];
         const uint8_t bit_id   = p[id * BIT_WIDTH + i][1];
+        const uint32_t source  = ref->data[id];
         const uint32_t target  = ref->data[chunk_id];
 
-        v->data[id] ^= target & (1 << (BIT_WIDTH - bit_id));
+
+        const uint32_t mask = (((source >> (BIT_WIDTH - i - 1)) ^ (target >> (BIT_WIDTH - bit_id - 1))) & 0x1) << (BIT_WIDTH - i - 1);
+        v->data[id] ^= mask;
+
+
+        //const uint32_t bit_src = (source >> (BIT_WIDTH - i - 1)) & 0x1;
+        //const uint32_t bit_dst = (target >> (BIT_WIDTH - bit_id - 1)) & 0x1;
+        //std::cout << (uint32_t)id << ", " << (uint32_t)i << " (" << bit_src << ") -> " 
+        //          << (uint32_t)chunk_id << " " << (uint32_t)bit_id << " ("<< bit_dst << ") " << mask << "\n";
     }
 }
 
