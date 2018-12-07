@@ -88,12 +88,16 @@ static PyMemberDef LBV_members[] = {
 
 
 static PyObject *LBV_xor(LBV *v1, PyObject *args);
+static PyObject *LBV_permute(LBV* v, PyObject* args, PyObject *kwds);
 static PyMethodDef LBV_methods[] = {
     {"rand", (PyCFunction) LBV_randomize, METH_NOARGS,
      "Set vector elements to random values"
     },
     {"xor", (PyCFunction) LBV_xor, METH_VARARGS,
      "xor this vector with another vector and store the result in the current vector"
+    },
+    {"permute", (PyCFunction) LBV_permute, METH_VARARGS,
+     "permute a given vector; the permutation is specified by its set ('x', 'y', etc) and order"
     },
     {NULL}  /* Sentinel */
 };
@@ -144,7 +148,7 @@ static PyTypeObject LBVType = {
 // =================
 
 
-// Lowlevel math
+// XOR
 static PyObject *LBV_xor(LBV *v1, PyObject *args) {
     LBV *v2;
     if (!PyArg_ParseTuple(args, "O!", &LBVType, &v2))
@@ -158,25 +162,54 @@ static PyObject *LBV_xor(LBV *v1, PyObject *args) {
 }
 
 
-void permute_chunk(LBV v, const uint8_t p[][2], uint32_t id) {
-    const uint32_t ref = v.data[id];
+// Permutation
+void permute_chunk(LBV *v, const uint8_t p[][2], uint32_t id, LBV *ref) {
     uint32_t mask = 0;
 
     for (uint8_t i = 0; i < BIT_WIDTH; ++i) {
         const uint8_t chunk_id = p[id * BIT_WIDTH + i][0];
         const uint8_t bit_id   = p[id * BIT_WIDTH + i][1];
-        const uint32_t swp = v.data[chunk_id];
+        const uint32_t target  = ref->data[chunk_id];
 
-        //ref & (1 << (BIT_WIDTH - i))
+        v->data[id] ^= target & (1 << (BIT_WIDTH - bit_id));
     }
 }
 
+void permute(LBV *v, const uint8_t p[][2]) {
+    LBV ref;
+    ref.data = (uint32_t *)malloc(VECTOR_WIDTH / 8);   
+    memcpy(ref.data, v->data, VECTOR_WIDTH / 8);
 
-// Permutation
-void permute(LBV v, const uint8_t p[][2]) {
     for (uint32_t i = 0; i < VECTOR_WIDTH / BIT_WIDTH; ++i) {
-        permute_chunk(v, p, i);
+        permute_chunk(v, p, i, &ref);
     }
+
+    free(ref.data);
+}
+
+static PyObject* LBV_permute(LBV *v, PyObject* args, PyObject *kwds) {
+    static char *kwlist[] = {"axis", "order", NULL};
+    const char *axis;
+    int order = 0;
+
+    if (!PyArg_ParseTupleAndKeywords(args, kwds, "si", kwlist,
+                                     &axis, &order))
+        return NULL;
+    
+    if (order < 0)
+        return NULL;
+
+    if (axis[0] == 'x') {
+        if (order >= DEPTH_X) return NULL;
+        permute(v, Px[order]);
+    } else if (axis[0] == 'y') {
+        if (order >= DEPTH_Y) return NULL;
+        //permute(v, Py[order]);
+    } else {
+        return NULL;
+    }
+
+    Py_RETURN_NONE;
 }
 
 
@@ -186,39 +219,85 @@ int main() {
         addup_vector(Px[i]);
     }
 
-
-
     return 0;
 }
 
 
+inline std::string perm_to_str(const uint8_t P[][2]) {
+    std::string ret = "";
+    for (uint32_t i = 0; i < VECTOR_WIDTH; ++i) {
+        ret += std::to_string(P[i][0] * BIT_WIDTH + P[i][1]) + " ";
+    }
+    return ret;
+}
+
+
+static PyObject* permutation_to_str(PyObject* self, PyObject* args, PyObject *kwds) {
+    static char *kwlist[] = {"axis", "order", NULL};
+    const char *axis;
+    int order = 0;
+
+    if (!PyArg_ParseTupleAndKeywords(args, kwds, "si", kwlist,
+                                     &axis, &order))
+        return NULL;
+    
+    if (order < 0)
+        return NULL;
+
+    std::string ret = "";
+    if (axis[0] == 'x') {
+        if (order >= DEPTH_X) return NULL;
+        ret = perm_to_str(Px[order]);
+    } else if (axis[0] == 'y') {
+        if (order >= DEPTH_Y) return NULL;
+        //ret = perm_to_str(Py[order]);
+    } else {
+        return NULL;
+    }
+
+    return PyUnicode_FromFormat(ret.c_str());
+}
+
+
+static PyObject* get_max_order(PyObject* self, PyObject* args, PyObject *kwds) {
+    static char *kwlist[] = {"axis", NULL};
+    const char *axis;
+
+    if (!PyArg_ParseTupleAndKeywords(args, kwds, "s", kwlist,
+                                     &axis))
+        return NULL;
+    
+    int max_order = 0;
+    if (axis[0] == 'x') {
+        max_order = DEPTH_X - 1;
+    } else if (axis[0] == 'y') {
+        max_order = DEPTH_Y - 1;
+    } else {
+        return NULL;
+    }
+
+    return PyLong_FromLong(max_order); 
+}
+
+
+static PyObject* get_vector_width(PyObject* self, PyObject* args, PyObject *kwds) {
+    return PyLong_FromLong(VECTOR_WIDTH); 
+}
+
 
 static PyMethodDef module_methods[] = {
+    {"permutation_to_str", (PyCFunction)permutation_to_str, METH_VARARGS,
+     "convert permutation to string, for printing"},
+    {"get_max_order", (PyCFunction)get_max_order, METH_VARARGS,
+     "return the maximum order for a given set of permutations"},
+    {"get_vector_width", (PyCFunction)get_vector_width, METH_NOARGS,
+     "retutn vector with the library was compiled for"},
     {NULL}  /* Sentinel */
 };
 
 #ifndef PyMODINIT_FUNC	/* declarations for DLL import/export */
 #define PyMODINIT_FUNC void
 #endif
-/*
-PyMODINIT_FUNC
-initpyhdc(void)
-{
-    PyObject* m;
-
-    if (PyType_Ready(&LBVType) < 0)
-        return;
-
-    m = Py_InitModule3("pyhdc", module_methods,
-                       "Module to work with long binary vectors");
-
-    if (m == NULL)
-        return;
-
-    Py_INCREF(&LBVType);
-    PyModule_AddObject(m, "LBV", (PyObject *)&LBVType);
-}
-*/
 
 
 static struct PyModuleDef cModPyDem = {
