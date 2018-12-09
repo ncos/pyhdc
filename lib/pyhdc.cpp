@@ -9,24 +9,10 @@
 #include "structmember.h"
 
 
-#include "permutations.h" 
+#define QUOTEME(M)  #M
+#define INCLUDE_FILE(M) QUOTEME(M)
 
-
-void print_vector(const uint8_t vec[][2]) {
-    for (unsigned long int j = 0; j < VECTOR_WIDTH; ++j) {
-        printf("(%d | %d)\n", vec[j][0], vec[j][1]);
-    }
-}
-
-void addup_vector(const uint8_t vec[][2]) {
-    uint64_t lo = 0, hi = 0;
-    for (unsigned long int j = 0; j < VECTOR_WIDTH; ++j) {
-        lo += vec[j][0];
-        hi += vec[j][1];
-    }
-
-    printf("(%lu | %lu)\n", lo, hi);
-}
+#include INCLUDE_FILE(HNAME)
 
 
 // LBV structure
@@ -67,7 +53,7 @@ static PyObject *LBV_repr(LBV *v) {
 static PyObject *LBV_randomize(LBV *v, PyObject *Py_UNUSED(ignored)) {
     std::mt19937 rng;
     rng.seed(std::random_device()());
-    std::uniform_int_distribution<std::mt19937::result_type> gen(0, 255); // distribution in range [1, 6]
+    std::uniform_int_distribution<std::mt19937::result_type> gen(0, 255);
 
     uint8_t *data = (uint8_t *)v->data;
     for (uint32_t i = 0; i < VECTOR_WIDTH / 8; ++i) {
@@ -75,6 +61,16 @@ static PyObject *LBV_randomize(LBV *v, PyObject *Py_UNUSED(ignored)) {
     }
 
     Py_RETURN_NONE;
+}
+
+static PyObject *LBV_is_zero(LBV *v, PyObject *Py_UNUSED(ignored)) {
+    for (uint32_t i = 0; i < VECTOR_WIDTH / BIT_WIDTH; ++i) {
+        if (v->data[i] != 0) {
+            Py_RETURN_FALSE;
+        }
+    }
+
+    Py_RETURN_TRUE;
 }
 
 
@@ -85,15 +81,22 @@ static PyMemberDef LBV_members[] = {
 
 static PyObject *LBV_xor(LBV *v1, PyObject *args);
 static PyObject *LBV_permute(LBV* v, PyObject* args, PyObject *kwds);
+static PyObject* LBV_inv_permute(LBV *v, PyObject* args, PyObject *kwds);
 static PyMethodDef LBV_methods[] = {
     {"rand", (PyCFunction) LBV_randomize, METH_NOARGS,
      "Set vector elements to random values"
+    },
+    {"is_zero", (PyCFunction) LBV_is_zero, METH_NOARGS,
+     "Check if all bits are zero"
     },
     {"xor", (PyCFunction) LBV_xor, METH_VARARGS,
      "xor this vector with another vector and store the result in the current vector"
     },
     {"permute", (PyCFunction) LBV_permute, METH_VARARGS,
      "permute a given vector; the permutation is specified by its set ('x', 'y', etc) and order"
+    },
+    {"inv_permute", (PyCFunction) LBV_inv_permute, METH_VARARGS,
+     "permute a given vector but inverse the permutation; the permutation is specified by its set ('x', 'y', etc) and order"
     },
     {NULL}  /* Sentinel */
 };
@@ -177,6 +180,7 @@ void permute_chunk(LBV *v, const uint8_t p[][2], uint32_t id, LBV *ref) {
     }
 }
 
+
 void permute(LBV *v, const uint8_t p[][2]) {
     LBV ref;
     ref.data = (uint32_t *)malloc(VECTOR_WIDTH / 8);   
@@ -206,7 +210,7 @@ static PyObject* LBV_permute(LBV *v, PyObject* args, PyObject *kwds) {
         permute(v, Px[order]);
     } else if (axis[0] == 'y') {
         if (order >= DEPTH_Y) return NULL;
-        //permute(v, Py[order]);
+        permute(v, Py[order]);
     } else {
         return NULL;
     }
@@ -215,11 +219,53 @@ static PyObject* LBV_permute(LBV *v, PyObject* args, PyObject *kwds) {
 }
 
 
-
-int main() {
-    for (unsigned long int i = 0; i < DEPTH_X; ++i) {
-        addup_vector(Px[i]);
+void inv_permute(LBV *v, const uint8_t p[][2]) {
+    uint8_t p_inv[VECTOR_WIDTH][2];
+    for (uint32_t i = 0; i < VECTOR_WIDTH; ++i) {
+        uint32_t id = p[i][0] * BIT_WIDTH + p[i][1];
+        p_inv[id][0] = i / BIT_WIDTH;
+        p_inv[id][1] = i % BIT_WIDTH;
     }
+
+    LBV ref;
+    ref.data = (uint32_t *)malloc(VECTOR_WIDTH / 8);   
+    memcpy(ref.data, v->data, VECTOR_WIDTH / 8);
+
+    for (uint32_t i = 0; i < VECTOR_WIDTH / BIT_WIDTH; ++i) {
+        permute_chunk(v, p_inv, i, &ref);
+    }
+
+    free(ref.data);
+}
+
+
+static PyObject* LBV_inv_permute(LBV *v, PyObject* args, PyObject *kwds) {
+    static char *kwlist[] = {"axis", "order", NULL};
+    const char *axis;
+    int order = 0;
+
+    if (!PyArg_ParseTupleAndKeywords(args, kwds, "si", kwlist,
+                                     &axis, &order))
+        return NULL;
+    
+    if (order < 0)
+        return NULL;
+
+    if (axis[0] == 'x') {
+        if (order >= DEPTH_X) return NULL;
+        inv_permute(v, Px[order]);
+    } else if (axis[0] == 'y') {
+        if (order >= DEPTH_Y) return NULL;
+        inv_permute(v, Py[order]);
+    } else {
+        return NULL;
+    }
+
+    Py_RETURN_NONE;
+}
+
+// Boilerplate
+int main() {
 
     return 0;
 }
@@ -252,7 +298,7 @@ static PyObject* permutation_to_str(PyObject* self, PyObject* args, PyObject *kw
         ret = perm_to_str(Px[order]);
     } else if (axis[0] == 'y') {
         if (order >= DEPTH_Y) return NULL;
-        //ret = perm_to_str(Py[order]);
+        ret = perm_to_str(Py[order]);
     } else {
         return NULL;
     }
