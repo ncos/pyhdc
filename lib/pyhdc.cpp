@@ -50,6 +50,47 @@ static PyObject *LBV_repr(LBV *v) {
     return PyUnicode_FromFormat(ret.c_str());
 }
 
+static PyObject *LBV_get_bit(LBV *v, PyObject *args) {
+    int bit_num = -1;
+    if (!PyArg_ParseTuple(args, "i", &bit_num))
+        return NULL;
+    if (bit_num < 0 || bit_num >= VECTOR_WIDTH)
+        return NULL;
+
+    const int chunk_id = bit_num / BIT_WIDTH;
+    const int bit_id   = bit_num % BIT_WIDTH;
+    const uint32_t chunk = v->data[chunk_id];
+
+    if ((chunk >> (BIT_WIDTH - bit_id - 1)) & 0x1 == 1) {
+        Py_RETURN_TRUE;
+    } else {
+        Py_RETURN_FALSE;
+    }
+}
+
+static PyObject *LBV_flip(LBV *v, PyObject *args) {
+    int bit_num = -1;
+    if (!PyArg_ParseTuple(args, "i", &bit_num))
+        return NULL;
+    if (bit_num < 0 || bit_num >= VECTOR_WIDTH)
+        return NULL;
+
+    const int chunk_id = bit_num / BIT_WIDTH;
+    const int bit_id   = bit_num % BIT_WIDTH;
+    const uint32_t mask = 0x1 << (BIT_WIDTH - bit_id - 1);
+    v->data[chunk_id] ^= mask;
+
+    Py_RETURN_NONE;
+}
+
+static PyObject *LBV_count(LBV *v, PyObject *Py_UNUSED(ignored)) {
+    uint32_t counter = 0;
+    for (uint32_t i = 0; i < VECTOR_WIDTH / BIT_WIDTH; ++i) {
+        counter += __builtin_popcount(v->data[i]);
+    }
+    return Py_BuildValue("i", counter);
+}
+
 static PyObject *LBV_randomize(LBV *v, PyObject *Py_UNUSED(ignored)) {
     std::mt19937 rng;
     rng.seed(std::random_device()());
@@ -88,6 +129,15 @@ static PyMethodDef LBV_methods[] = {
     },
     {"is_zero", (PyCFunction) LBV_is_zero, METH_NOARGS,
      "Check if all bits are zero"
+    },
+    {"count", (PyCFunction) LBV_count, METH_NOARGS,
+     "Count the number of 1s in a vector"
+    },
+    {"get_bit", (PyCFunction) LBV_get_bit, METH_VARARGS,
+     "get the value of a given bit as True/False"
+    },
+    {"flip", (PyCFunction) LBV_flip, METH_VARARGS,
+     "flip the value of a given bit"
     },
     {"xor", (PyCFunction) LBV_xor, METH_VARARGS,
      "xor this vector with another vector and store the result in the current vector"
@@ -171,12 +221,6 @@ void permute_chunk(LBV *v, const uint8_t p[][2], uint32_t id, LBV *ref) {
 
         const uint32_t mask = (((source >> (BIT_WIDTH - i - 1)) ^ (target >> (BIT_WIDTH - bit_id - 1))) & 0x1) << (BIT_WIDTH - i - 1);
         v->data[id] ^= mask;
-
-
-        //const uint32_t bit_src = (source >> (BIT_WIDTH - i - 1)) & 0x1;
-        //const uint32_t bit_dst = (target >> (BIT_WIDTH - bit_id - 1)) & 0x1;
-        //std::cout << (uint32_t)id << ", " << (uint32_t)i << " (" << bit_src << ") -> " 
-        //          << (uint32_t)chunk_id << " " << (uint32_t)bit_id << " ("<< bit_dst << ") " << mask << "\n";
     }
 }
 

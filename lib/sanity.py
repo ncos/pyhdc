@@ -2,6 +2,8 @@
 
 import pyhdc
 
+import time, random
+
 print ("Max order on x:", pyhdc.get_max_order('x'))
 print ("Max order on y:", pyhdc.get_max_order('y'))
 print ("Vector width:", pyhdc.get_vector_width(), "bits")
@@ -44,14 +46,68 @@ def test_permute(v_, axis, order, times):
     print ()
     return v.is_zero()
 
+
+
+def test_bitmanip(v_):
+    v = pyhdc.LBV()
+    v.xor(v_) # copy v_ to v
+
+    print ("Read bit test")
+    ref_str = str(v)
+    print (ref_str)
+    test_str = ""
+    for i in range(pyhdc.get_vector_width()):
+        if (v.get_bit(i)):
+            test_str += '1'
+        else:
+            test_str += '0'
+
+        if ((i + 1) % 32 == 0):
+            test_str += '_'
+    print (test_str)
+    t1_result = (test_str == ref_str)
+    print ("Passed:", t1_result)
+    print ()
+
+    print ("Flip bit test")
+    print (v)
+    for i in range(pyhdc.get_vector_width() // 2):
+        v.flip(i * 2)
+    print (v)
+    for i in range(pyhdc.get_vector_width() // 2):
+        v.flip(i * 2)
+    print (v)
+    for i in range(pyhdc.get_vector_width()):
+        if (v.get_bit(i)):
+            v.flip(i)
+    print (v)
+    t2_result = v.is_zero()
+    print ("Passed:", t2_result)
+    print ()
+
+    print ("Count bit test")
+    nbits = 0
+    for i in range(pyhdc.get_vector_width()):
+        choice = random.choice([True, False])
+        if (choice):
+            v.flip(i)
+            nbits += 1
+    test_nbits = v.count()
+    print (v)
+    t3_result = (nbits == test_nbits)
+    print ("Passed:", t3_result, "true value = ", 
+           nbits, "result = ", test_nbits)
+    return t1_result & t2_result & t3_result
+    
+
 passed = True
 passed &= test_permute(a, 'x', 0, 1)
 passed &= test_permute(a, 'y', 1, 1)
 passed &= test_permute(a, 'x', 0, 100)
+passed &= test_bitmanip(a)
 print("All tests passed:", passed)
 
 # ===== Performance =====
-import time, random
 
 print ()
 num = 5000000
@@ -118,3 +174,45 @@ end = time.time()
 a.xor(original)
 print ((end - start) / float(num), "sec per (inverse) permutation")
 print ("Test passed:", a.is_zero())
+print ()
+
+print ("Bit manipulation performance")
+num = 5000000
+a.rand()
+
+bitseq = []
+for i in range(num):
+    bitseq.append(random.randint(0, pyhdc.get_vector_width() - 1))
+
+start = time.time()
+for bit in bitseq:
+    a.flip(bit)
+
+end = time.time()
+print ((end - start) / float(num), "sec per bit flip")
+print ()
+
+a.rand()
+
+bitseq = []
+for i in range(num):
+    bitseq.append(random.randint(0, pyhdc.get_vector_width() - 1))
+
+start = time.time()
+pos_cnt = 0
+for bit in bitseq:
+    if (a.get_bit(bit)):
+        pos_cnt += 1
+end = time.time()
+print ((end - start) / float(num), "sec per bit lookup")
+print ("Positive percentage:", int(pos_cnt / num * 100))
+print ()
+
+a.rand()
+start = time.time()
+for i in range(num):
+    a.count()
+
+end = time.time()
+print ((end - start) / float(num), "sec per bit count")
+print ()
