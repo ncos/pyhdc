@@ -88,7 +88,7 @@ class PatternHistogram:
         elif (len(img.shape) == 2):
             self.image = img
         else:
-            print ("Unsupported image size: ", image.shape)
+            print ("Unsupported image size: ", self.image.shape)
 
         print ("Image shape:", self.image.shape, "Type:", self.image.dtype)
 
