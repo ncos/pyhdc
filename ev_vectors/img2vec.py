@@ -100,6 +100,22 @@ def img2vec(img, vmap, use_fast=False):
     return x
 
 
+def np_vec2c_vec(c_vec):
+    x = pyhdc.LBV()
+    if (x.is_zero()):
+        print ("Starting conversion with a zero vector")
+    else:
+        print ("ERROR! - starting with a nonzero vector")
+
+    for i, bit in enumerate(c_vec):
+        if (bit == 1):
+            x.flip(i)
+    
+    # check at least a bit count
+    nbits = x.count()
+
+    return x
+
 if __name__ == '__main__':
     print ("Max order on x:", pyhdc.get_max_order('x'))
     print ("Max order on y:", pyhdc.get_max_order('y'))
@@ -110,6 +126,8 @@ if __name__ == '__main__':
     X = []
     y = []
     get_X_y("/home/ncos/raid/EV-IMO/SET4/O1O2O3_3", X, y)
+
+    X = X[:10]
 
     # vector map
     vmap = []
@@ -122,3 +140,11 @@ if __name__ == '__main__':
     print ("Processing", len(X), "images")
     vectors = [img2vec(cv2.imread(img_name, cv2.IMREAD_UNCHANGED), vmap) for img_name in X]
 
+    # save data
+    f = open('./O1O2O3_3.txt', 'w')
+    for i, v in enumerate(vectors):
+        s = v.__repr__()
+        for vel in y[i]:
+            s += " " + str(vel)
+        f.write(s + "\n")
+    f.close()

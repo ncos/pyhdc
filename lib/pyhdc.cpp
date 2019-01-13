@@ -44,7 +44,7 @@ static PyObject *LBV_repr(LBV *v) {
             const uint32_t bit_src = (chunk >> (BIT_WIDTH - i - 1)) & 0x1;
             ret += std::to_string(bit_src);
         }
-        ret += '_';
+        //ret += '_';
     }
 
     return PyUnicode_FromFormat(ret.c_str());
