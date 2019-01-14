@@ -91,12 +91,19 @@ class BinarySpace:
                     end_command = True
 
                     print('Ending program...')
-
+            
+            row_pr = -1
             while count < end_count:
                 # while sum(vector_energy) != 0:
                 vector_probability = vector_energy / sum(vector_energy)
-                row = np.random.choice(range(self.graph_size), 1, p=vector_probability)
-                row = row[0]
+                #row = np.random.choice(range(self.graph_size), 1, p=vector_probability)
+                row = np.argmax(vector_probability)
+                #row = row[0]
+                if (row_pr == row):
+                    row = np.random.choice(range(self.graph_size), 1)[0]
+
+                row_pr = row
+
                 bit_gradient = np.ones(self.vector_length)
                 m_row = vertexes[row][0]
 

@@ -64,7 +64,7 @@ def get_X_y(base_dir, X, y, X_val, y_val, rate=10):
             vz = float(split_line[3])
 
             len2 = vx * vx + vy * vy + vz * vz
-            if (len2 < 0.4):
+            if (len2 < 0.02):
                 continue
             #l = sqrt(len2)
 
@@ -84,12 +84,12 @@ def process_image(path, velocity, augment):
     """Process and augment an image."""
     image = load_img(path)
     image = img_to_array(image)
-    #image[:,:,0] = 0
-    #image[:,:,2] = 0
+    image[:,:,0] = 0
+    image[:,:,2] = 0
 
     #print (image.shape)
  
-    if augment:
+    if False:
         image = random_shift(image, 0, 0.2, 0, 1, 2)  # only vertical
         if random.random() < 0.5:
             image = flip_axis(image, 1)
@@ -175,7 +175,7 @@ def train():
     per_epoch = max(len(X) // batch_size, 1)
     val_per_epoch = max(len(X_val) // batch_size, 1)
 
-    tensorboard = keras.callbacks.TensorBoard(log_dir='./logs', histogram_freq=0, write_grads=False,
+    tensorboard = keras.callbacks.TensorBoard(log_dir="./logs", histogram_freq=0, write_grads=False,
                             write_graph=True, write_images=True)
 
     train_gen = DataGenerator(X, y, batch_size, True)
