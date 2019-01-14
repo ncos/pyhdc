@@ -152,7 +152,6 @@ def train():
     X_val = []
     y_val = []
 
-    #get_X_y("/home/ncos/pyhdc/test_data", X, y)
     get_X_y("/home/ncos/raid/EV-IMO/SET4/O1O2O3_0", X, y, X_val, y_val)
     get_X_y("/home/ncos/raid/EV-IMO/SET4/O1O2O3_1", X, y, X_val, y_val)
     get_X_y("/home/ncos/raid/EV-IMO/SET4/O1O2O3_3", X, y, X_val, y_val)
@@ -176,17 +175,11 @@ def train():
     per_epoch = max(len(X) // batch_size, 1)
     val_per_epoch = max(len(X_val) // batch_size, 1)
 
-    #shutil.rmtree('./logs')
     tensorboard = keras.callbacks.TensorBoard(log_dir='./logs', histogram_freq=0, write_grads=False,
                             write_graph=True, write_images=True)
 
     train_gen = DataGenerator(X, y, batch_size, True)
     val_gen   = DataGenerator(X_val, y_val, batch_size, True)
-
-    #net.fit_generator(_generator(batch_size, X, y), steps_per_epoch=per_epoch, epochs=100, verbose=1,
-    #                  callbacks=[tensorboard], validation_data=_generator(batch_size, X_val, y_val),
-    #                  validation_steps=val_per_epoch)
-
 
     net.fit_generator(generator=train_gen, steps_per_epoch=per_epoch, epochs=200, verbose=1,
                       callbacks=[tensorboard], validation_data=val_gen,

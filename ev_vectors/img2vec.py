@@ -1,7 +1,9 @@
 #!/usr/bin/python3
 
 import pyhdc
-import sys, os
+import argparse
+import numpy as np
+import os, sys, shutil, signal, glob, time
 
 try:
     sys.path.remove('/opt/ros/kinetic/lib/python2.7/dist-packages')
@@ -23,7 +25,6 @@ def get_X_y(base_dir, X, y):
 
             X.append(img_path)
             y.append([vx, vy, vz])
-
 
 def i2v_baseline(image, vmap):
     pixel_count = 0
@@ -108,15 +109,49 @@ def np_vec2c_vec(c_vec):
         print ("ERROR! - starting with a nonzero vector")
 
     for i, bit in enumerate(c_vec):
-        if (bit == 1):
+        if (bit == '1'):
             x.flip(i)
-    
+
+    print ("Added vector of length:", len(c_vec))
     # check at least a bit count
     nbits = x.count()
 
     return x
 
+
+def safe_hamming(v1, v2):
+    x = pyhdc.LBV()
+    x.xor(v1) # x = v1
+    x.xor(v2) # x = v1 xor v2
+    return x.count()
+
+
+def check_vmap(vmap):
+    f = open('./vmap_check.txt', 'w')
+    l = len(vmap)
+    f.write("Vmap size: " + str(l) + "\n")
+    print ("Checking vmap")
+    s = ""
+    for i in range(l):
+        print ("Processing vmap vector", i + 1, "out of", l)
+        for j in range(l):
+            h = safe_hamming(vmap[i], vmap[j])
+            s += str(h).rjust(5)
+        s += "\n"
+
+    f.write(s)
+    f.close()
+    print ()
+
+
 if __name__ == '__main__':
+    parser = argparse.ArgumentParser()
+    parser.add_argument('--base_dir',
+                        type=str,
+                        default="",
+                        required=True)
+    args = parser.parse_args()
+
     print ("Max order on x:", pyhdc.get_max_order('x'))
     print ("Max order on y:", pyhdc.get_max_order('y'))
     print ("Vector width:", pyhdc.get_vector_width(), "bits")
@@ -125,26 +160,47 @@ if __name__ == '__main__':
     # load the dataset
     X = []
     y = []
-    get_X_y("/home/ncos/raid/EV-IMO/SET4/O1O2O3_3", X, y)
+    get_X_y(args.base_dir, X, y)
 
-    X = X[:10]
+    #X = X[:10]
 
     # vector map
+    print ("\n=======================\nReading vmap...")
     vmap = []
-    for i in range(256):
-        v = pyhdc.LBV()
-        v.rand()
+    f = open('./vmap.txt', 'r')
+    for i, line in enumerate(f.readlines()):
+        v = np_vec2c_vec(line)
+        #v = pyhdc.LBV()
+        #v.rand()
         vmap.append(v)
+    f.close()
+
+    print ("Read", len(vmap), "vectors")
+    print ()
+
+    # sanity check
+    check_vmap(vmap)
 
     # convert to vectors
     print ("Processing", len(X), "images")
-    vectors = [img2vec(cv2.imread(img_name, cv2.IMREAD_UNCHANGED), vmap) for img_name in X]
 
-    # save data
-    f = open('./O1O2O3_3.txt', 'w')
-    for i, v in enumerate(vectors):
+    f = open(os.path.join(args.base_dir, 'im2vec.txt'), 'w')
+    ref_vec = pyhdc.LBV()
+    for i, img_name in enumerate(X):
+        v = img2vec(cv2.imread(img_name, cv2.IMREAD_UNCHANGED), vmap)
+
         s = v.__repr__()
         for vel in y[i]:
             s += " " + str(vel)
         f.write(s + "\n")
+
+        # ======
+        if (i > 0):
+            ref_vec.xor(v)
+            hamming = ref_vec.count()
+            print ("\t\tHamming = ", hamming)
+
+        ref_vec.xor(ref_vec)
+        ref_vec.xor(v)
+
     f.close()
