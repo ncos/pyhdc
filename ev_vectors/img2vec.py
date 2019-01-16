@@ -39,7 +39,7 @@ def i2v_baseline(image, vmap):
 
             # copy the vector from map
             v = pyhdc.LBV()
-            v.xor(vmap[val])
+            v.xor(vmap[val - 1])
 
             # permute
             if (i > 0):
@@ -72,7 +72,7 @@ def i2v_fast(image, vmap):
                 x.permute('y', j - 1)
 
             # add to the accumulator
-            x.xor(vmap[val])
+            x.xor(vmap[val - 1])
         
     return x, pixel_count
 
@@ -108,13 +108,19 @@ def np_vec2c_vec(c_vec):
     else:
         print ("ERROR! - starting with a nonzero vector")
 
+    btc = 0
     for i, bit in enumerate(c_vec):
         if (bit == '1'):
+            btc += 1
             x.flip(i)
 
-    print ("Added vector of length:", len(c_vec))
+    if (pyhdc.get_vector_width() != len(c_vec)):
+        print ("Vector length mismatch:", len(c_vec), pyhdc.get_vector_width())
+
     # check at least a bit count
     nbits = x.count()
+    if (btc != nbits):
+        print ("Bitcount mismatch!", nbits, btc)
 
     return x
 

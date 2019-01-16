@@ -20,13 +20,16 @@ def check_vmap(vmap):
     f.write("Vmap size: " + str(l) + "\n")
     print ("Checking vmap")
     s = ""
+    s2 = ""
     for i in range(l):
         for j in range(l):
             h = safe_hamming(vmap[i], vmap[j])
-            s += str(h).rjust(5)
+            s += str(h) + " " #.rjust(5)
+            s2 += str(i) + " " + str(j) + " " + str(h) + "\n"
         s += "\n"
 
     f.write(s)
+    f.write(s2)
     f.close()
     print ()
 

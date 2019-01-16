@@ -27,24 +27,25 @@ def model(load, shape, checkpoint=None):
     """Return a model from file or to train on."""
     if load and checkpoint: return load_model(checkpoint)
 
-    conv_layers1, conv_layers2, dense_layers = [24, 36, 48], [64, 64], [1164, 200, 50, 10]
+    conv_layers1, conv_layers2, dense_layers = [24, 36, 48], [64], [8000, 7000, 7000, 4000, 1164, 200, 50, 10]
 
     model = Sequential()
-    model.add(Convolution2D(24, (5, 5), activation='relu', input_shape=shape))
-    model.add(MaxPooling2D())
-    for cl in conv_layers1:
-        model.add(Convolution2D(cl, (5, 5), strides=(2, 2), activation='relu'))
-        #model.add(MaxPooling2D())
-        model.add(BatchNormalization())
+    model.add(Dense(2 * 8160, activation='sigmoid', input_shape=shape))
+    model.add(BatchNormalization())
 
-    for cl in conv_layers2:
-        model.add(Convolution2D(cl, (3, 3), strides=(1, 1), activation='relu'))
-        model.add(BatchNormalization())
-        #model.add(MaxPooling2D())
+    #model.add(Convolution2D(24, (5, 5), activation='relu', input_shape=shape))
+    #model.add(MaxPooling2D())
+    #for cl in conv_layers1:
+        #model.add(Convolution2D(cl, (5, 5), strides=(1, 1), activation='relu'))
+        #model.add(BatchNormalization())
 
-    model.add(Flatten())
+    #for cl in conv_layers2:
+        #model.add(Convolution2D(cl, (3, 3), strides=(1, 1), activation='relu'))
+        #model.add(BatchNormalization())
+
+    #model.add(Flatten())
     for dl in dense_layers:
-        model.add(Dense(dl, activation='relu'))
+        model.add(Dense(dl, activation='sigmoid'))
         model.add(BatchNormalization())
         #model.add(Dropout(0.5))
 
@@ -54,17 +55,15 @@ def model(load, shape, checkpoint=None):
 
 
 def get_X_y(base_dir, X, y, X_val, y_val, rate=10):
-    with open(os.path.join(base_dir, 'cam_vels_local_frame.txt')) as fin:
-        allines = fin.readlines()
-        for i, line in enumerate(allines):
+    with open(os.path.join(base_dir, 'im2vec.txt')) as fin:
+        for i, line in enumerate(fin.readlines()):
             split_line = line.split(' ')
-            img_path = os.path.join(base_dir, 'slices', split_line[0])
             vx = float(split_line[1])
             vy = float(split_line[2])
             vz = float(split_line[3])
 
             len2 = vx * vx + vy * vy + vz * vz
-            if (len2 < 0.2):
+            if (len2 < 0.4):
                 continue
             #l = sqrt(len2)
 
@@ -72,33 +71,22 @@ def get_X_y(base_dir, X, y, X_val, y_val, rate=10):
             vy /= 2.0
             vz /= 2.0
 
+            # read the vector
+            vec = np.zeros((8160,), dtype=np.float)
+            for j, char in enumerate(split_line[0]):
+                if (j >= 8160): break
+                if (char == '1'):
+                    vec[j] = 1
+
+            vec -= 0.5
+            #vec = vec.reshape(90, 90, 1)
+
             if (i % rate == 0):
-                X_val.append(img_path)
+                X_val.append(vec)
                 y_val.append([vx, vy, vz])
             else:
-                X.append(img_path)
-                y.append([vx, vy, vz])
- 
-
-def process_image(path, velocity, augment):
-    """Process and augment an image."""
-    image = load_img(path)
-    image = img_to_array(image)
-    image[:,:,0] = 0
-    image[:,:,2] = 0
-
-    #print (image.shape)
- 
-    if False:
-        image = random_shift(image, 0, 0.2, 0, 1, 2)  # only vertical
-        if random.random() < 0.5:
-            image = flip_axis(image, 1)
-            steering_angle = -steering_angle
-
-    image = image.astype(np.float32)
-    image = image / 255 - 0.5
-
-    return image, velocity
+                X.append(vec)
+                y.append([vx, vy, vz]) 
 
 
 class DataGenerator(keras.utils.Sequence):
@@ -118,9 +106,8 @@ class DataGenerator(keras.utils.Sequence):
 
         batch_X, batch_y = [], []
         for k in idx:
-            image, sa = process_image(self.X[k], self.y[k], augment=False)
-            batch_X.append(image)
-            batch_y.append(sa)
+            batch_X.append(self.X[k])
+            batch_y.append(self.y[k])
 
         return np.array(batch_X), np.array(batch_y)
 
@@ -137,15 +124,13 @@ def train():
     parser.add_argument('--big', action='store_true')
     parser.add_argument('--batch',
                         type=int,
-                        default=32,
+                        default=128,
                         required=False)
     args = parser.parse_args()
 
 
-
-
     """Load our network and our data, fit the model, save it."""
-    net = model(load=False, shape=(260, 346, 3))
+    net = model(load=False, shape=(8160,))
 
     X = []
     y = []
@@ -175,7 +160,7 @@ def train():
     per_epoch = max(len(X) // batch_size, 1)
     val_per_epoch = max(len(X_val) // batch_size, 1)
 
-    tensorboard = keras.callbacks.TensorBoard(log_dir="./logs", histogram_freq=0, write_grads=False,
+    tensorboard = keras.callbacks.TensorBoard(log_dir='./logs', histogram_freq=0, write_grads=False,
                             write_graph=True, write_images=True)
 
     train_gen = DataGenerator(X, y, batch_size, True)
@@ -185,7 +170,11 @@ def train():
                       callbacks=[tensorboard], validation_data=val_gen,
                       validation_steps=val_per_epoch)
 
-    net.save('model.h5')
+    model_name = 'model'
+    if (args.big):
+        model_name += '_big'
+    model_name += str(batch_size)
+    net.save(model_name + '.h5')
 
 if __name__ == '__main__':
     train()
