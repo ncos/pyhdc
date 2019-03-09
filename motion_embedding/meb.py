@@ -5,6 +5,14 @@ import argparse
 import numpy as np
 import os, sys, time
 
+try:
+    sys.path.remove('/opt/ros/kinetic/lib/python2.7/dist-packages')
+except:
+    pass
+
+import cv2
+
+
 
 def np_vec2c_vec(c_vec):
     x = pyhdc.LBV()
@@ -63,12 +71,66 @@ def get_X_y(base_dir, X, y, X_val, y_val, rate=10):
                 y.append([vx, vy, vz]) 
 
 
+def color_scaled_square(img, scale, i, j):
+    for k in range(i * scale, (i + 1) * scale):
+        for l in range(j * scale, (j + 1) * scale):
+            img[k,l] = 255;
+
+
+def vec_visual(v, shape, scale=9):
+    img = np.zeros((shape[0] * scale, shape[1] * scale), dtype=np.uint8)
+    for i in range(shape[0]):
+        for j in range(shape[1]):
+            idx = i * shape[0] + j
+            if (v.get_bit(idx)):
+                color_scaled_square(img, scale, i, j)
+    return img
+
+
+def vmap2images(vmap, scale=9):
+    shape = (90, 90)
+
+
+    for i, v in enumerate(vmap):
+        if (i == 0) or (i > 254):
+            continue
+        
+        img = vec_visual(v, shape, scale)
+        name = "frame_" + str(i - 1).rjust(4, '0') + ".png"
+        z = np.zeros((shape[0] * scale, shape[1] * scale), dtype=np.uint8)
+        img = np.dstack((img, img, img))
+        
+        v_0 = pyhdc.LBV()
+        v_0.xor(vmap[0])
+        v_0.xor(v)
+        v_0_img = vec_visual(v_0, shape, scale)
+
+        img_r = np.copy(img)
+        img_r[:,:,2] = v_0_img
+
+        if (i > 0):
+            v_prev_ = vmap[i - 1]
+            v_prev = pyhdc.LBV()
+            v_prev.xor(v_prev_)
+            v_prev.xor(v)
+            
+            img_diff = vec_visual(v_prev, shape, scale)
+            img[:,:,2] = img_diff
+
+        
+        sep = np.zeros((shape[0] * scale, 10, 3), dtype=np.uint8)
+
+        img = np.hstack((img, sep, img_r))
+        cv2.imwrite("/home/ncos/Desktop/vmap_viz/" + name, img)
+
+
 
 class Vel2Vec:
     def __init__(self):
         self.vmap_paths = ['vmap_x.txt', 'vmap_y.txt', 'vmap_z.txt']
         self.vmaps = [self.read_vmap(path) for path in self.vmap_paths]
-    
+        vmap2images(self.vmaps[0])
+
     def vel2vecs(self, vel):
         ret = []
 
@@ -140,8 +202,6 @@ def memscore(v_img, M, M_img):
         count_ub  = M_img[i].count()
         
         print (i, ": ", h0, "->", h1, "|", count_raw, "->", count_ub)
-
-
 
 
 if __name__ == '__main__':
