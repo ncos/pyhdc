@@ -5,6 +5,13 @@ import argparse
 import numpy as np
 import os, sys, time
 
+try:
+    sys.path.remove('/opt/ros/kinetic/lib/python2.7/dist-packages')
+except:
+    pass
+
+import cv2
+
 
 def np_vec2c_vec(c_vec):
     x = pyhdc.LBV()
@@ -64,8 +71,6 @@ def get_X_y(base_dir, X, y, X_val, y_val, rate=10):
 
 
 
-
-
 def csum(vectors):
     ret = pyhdc.LBV()
     if (len(vectors) == 1):
@@ -91,7 +96,25 @@ def bind(vectors, basis_vectors):
         x.xor(basis_vectors[i])
         scaled_v.append(x)
 
+    
+    sys.exit()
     return csum(scaled_v)
+
+
+def color_scaled_square(img, scale, i, j):
+    for k in range(i * scale, (i + 1) * scale):
+        for l in range(j * scale, (j + 1) * scale):
+            img[k,l] = 255;
+
+
+def vec_visual(v, shape=(90,90), scale=9):
+    img = np.zeros((shape[0] * scale, shape[1] * scale), dtype=np.uint8)
+    for i in range(shape[0]):
+        for j in range(shape[1]):
+            idx = i * shape[0] + j
+            if (v.get_bit(idx)):
+                color_scaled_square(img, scale, i, j)
+    return img
 
 
 def memscore(v_img, M, M_img, seq_len, basis_vectors):
@@ -188,15 +211,15 @@ if __name__ == '__main__':
             x.rand()
         basis_vectors.append(x)
 
-    seq_len = 3
+    seq_len = 40
 
     print ("Creating a memory")
     
-    #MEMORY, MEMORY_image = create_memory(X, seq_len, basis_vectors)
-    #h = memscore(X[0], MEMORY, MEMORY_image, seq_len, basis_vectors)
-    #print (h)
+    MEMORY, MEMORY_image = create_memory(X, seq_len, basis_vectors)
+    h = memscore(X[0], MEMORY, MEMORY_image, seq_len, basis_vectors)
+    print (h)
     
-    #sys.exit()
+    sys.exit()
     for seq_len in range(1, 10000):
         MEMORY, MEMORY_image = create_memory(X, seq_len, basis_vectors)
 
