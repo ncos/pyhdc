@@ -100,8 +100,8 @@ def vmap2images(vmap, scale=9):
         z = np.zeros((shape[0] * scale, shape[1] * scale), dtype=np.uint8)
         img = np.dstack((img, img, img))
         
-        cv2.imwrite("/home/ncos/Desktop/vmap_viz/" + name, img)
-        continue
+        #cv2.imwrite("/home/ncos/Desktop/vmap_viz/" + name, img)
+        #continue
 
         v_0 = pyhdc.LBV()
         v_0.xor(vmap[0])
