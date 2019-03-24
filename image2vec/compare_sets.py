@@ -5,14 +5,14 @@ import numpy as np
 import os, sys, signal, math, time
 import matplotlib.colors as colors
 
-import pydvs, cv2
+import pydvs, pyhdc, cv2
 
 
 def colorizeImage(flow_x, flow_y):
     hsv_buffer = np.empty((flow_x.shape[0], flow_x.shape[1], 3))
     hsv_buffer[:,:,1] = 1.0
-    hsv_buffer[:,:,0] = (np.arctan2(flow_y, flow_x) + np.pi)/(2.0*np.pi)
-    hsv_buffer[:,:,2] = np.linalg.norm( np.stack((flow_x,flow_y), axis=0), axis=0 )
+    hsv_buffer[:,:,0] = (np.arctan2(flow_y, flow_x) + np.pi)/(2.0 * np.pi)
+    hsv_buffer[:,:,2] = np.linalg.norm( np.stack((flow_x, flow_y), axis=0), axis=0 )
     hsv_buffer[:,:,2] = np.log(1. + hsv_buffer[:,:,2])
 
     flat = hsv_buffer[:,:,2].reshape((-1))
@@ -34,7 +34,7 @@ def safeHamming(v1, v2):
     return x.count()
 
 
-class VecImage:
+class VecImageRaw:
     def __init__(self, path, ch=0):
         self.img = cv2.imread(path, cv2.IMREAD_UNCHANGED).astype(np.float32)
         self.channel = ch
@@ -56,7 +56,6 @@ class VecImage:
         cv2.imshow('image', vis)
         cv2.waitKey(0) 
 
-
     def image2flow(self, img):
         sobelx = cv2.Sobel(img, cv2.CV_32F, 1, 0, ksize=3)
         sobely = cv2.Sobel(img, cv2.CV_32F, 0, 1, ksize=3)
@@ -66,9 +65,68 @@ class VecImage:
 def getImageFolder(path):
     images_f1 = []
     for img_path in os.listdir(args.f1):
-        I = VecImage(os.path.join(args.f1, img_path))
+        I = VecImageRaw(os.path.join(args.f1, img_path))
         images_f1.append(I)
     return images_f1
+
+# =================================
+
+class VecImageCloud:
+    def __init__(self, shape, cloud):
+        self.shape = shape
+        self.width = 0
+        if (cloud.shape[0] > 0):
+            self.width = cloud[-1][0] - cloud[0][0]
+
+        # Compute images according to the model
+        dvs_img = pydvs.dvs_img(cloud, self.shape, model=[0, 0, 0, 0], 
+                                scale=1, K=None, D=None)
+        #dvs_img = np.copy(dvs_img[:50,:50,:])
+        
+        # Compute errors on the images
+        dgrad = np.zeros((dvs_img.shape[0], dvs_img.shape[1], 2), dtype=np.float32)
+        self.x_err, self.y_err, self.yaw_err, self.z_err, self.e_count, self.nz_avg = \
+            pydvs.dvs_flow_err(dvs_img, dgrad)
+
+        print (self.x_err, self.y_err, self.z_err, self.yaw_err, self.e_count, self.nz_avg)
+
+        # Visualization
+        c_img = dvs_img[:,:,0] + dvs_img[:,:,2]
+        c_img = np.dstack((c_img, c_img, c_img)) * 0.5 / (self.nz_avg + 1e-3)
+
+        dvs_img[:,:,1] *= 1.0 / self.width
+        t_img = np.dstack((dvs_img[:,:,1], dvs_img[:,:,1], dvs_img[:,:,1]))
+        G_img = colorizeImage(dgrad[:,:,0], dgrad[:,:,1])
+
+        self.vec = self.image2vec(dgrad)
+
+        cv2.namedWindow('GUI', cv2.WINDOW_NORMAL)
+        cv2.imshow('GUI', np.hstack((c_img, t_img, G_img)))
+        cv2.waitKey(0) 
+
+
+    def num2vec(self, num, size=500):
+        n = int(num)
+        min_ = -size // 2
+        n_bits = n - min_
+        if (n_bits < 0): n_bits = 0
+        if (n_bits > size): n_bits = size
+        return n_bits
+
+
+    def image2vec(self, dgrad):
+        ret = pyhdc.LBV()
+        params = [self.x_err, self.y_err, self.z_err]
+
+        chunk_size = 500
+        to_encode = [self.num2vec(p, chunk_size) for p in params]
+        
+        for i, n_bits in enumerate(to_encode):
+            start_offset = i * chunk_size
+            for j in range(n_bits):
+                ret.flip(start_offset + j)
+
+        return ret
 
 
 def crossEvaluateHamming(images, rjust=5):
@@ -80,7 +138,7 @@ def crossEvaluateHamming(images, rjust=5):
                 continue
             score = safeHamming(images[i].vec, images[j].vec)
             ret += str(score).rjust(rjust) + " "
-        str += "\n"
+        ret += "\n"
     return ret
 
 
@@ -90,11 +148,34 @@ if __name__ == '__main__':
                         type=str)
     parser.add_argument('f2',
                         type=str)
-
+    parser.add_argument('--width',
+                        type=float,
+                        required=False,
+                        default=0.2)
     args = parser.parse_args()
+ 
+    sl_npz_1 = np.load(args.f1)
+    cloud_1          = sl_npz_1['events']
+    idx_1            = sl_npz_1['index']
+    discretization_1 = sl_npz_1['discretization']
+    length_1 = cloud_1[-1][0] - cloud_1[0][0]
+    n_1 = 6
+    print ("Length 1:", length_1)
 
-    images_f1 = getImageFolder(args.f1)
-    #images_f2 = getImageFolder(args.f2)
+    images_f1 = []
+    for i in range(n_1):
+        sl, _ = pydvs.get_slice(cloud_1, idx_1, i * length_1 / n_1, args.width, 0, discretization_1)
+        images_f1.append(VecImageCloud((180, 240), sl))
 
     # Evaluate:
     print(crossEvaluateHamming(images_f1))
+
+
+
+    #sl_npz_2 = np.load(args.f2)
+    #cloud_2          = sl_npz_2['events']
+    #idx_2            = sl_npz_2['index']
+    #discretization_2 = sl_npz_2['discretization']
+
+    #images_f1 = getImageFolder(args.f1)
+    #images_f2 = getImageFolder(args.f2)
