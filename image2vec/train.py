@@ -17,7 +17,7 @@ class Memory:
     def add(self, v):
         self.vcount += 1
         x = pyhdc.LBV() 
-        x.rand()
+        #x.rand()
         self.basis_vectors.append(x)
 
         masked_v = pyhdc.LBV()
@@ -25,23 +25,31 @@ class Memory:
         masked_v.xor(x)
         self.masked_vectors.append(masked_v)
 
-    def build(self):
+    def build(self, to_adjust=-1):
         print ("\tmemory vectors:", self.vcount)
+        if (to_adjust > 0): print ("\t\tadjusting to:", to_adjust)
 
         self.m.xor(self.m)
         if (self.vcount == 0):
             self.m.rand()
             return
 
-        if (self.vcount == 1):
-            self.m.xor(self.masked_vectors[0])
+        random_vectors = []
+        if (to_adjust > self.vcount):
+            x = pyhdc.LBV() 
+            x.rand()
+            random_vectors.append(x)
+
+        csum_vectors = self.masked_vectors + random_vectors
+        if (len(csum_vectors) == 1):
+            self.m.xor(csum_vectors[0])
             self.masked_vectors = []
             return
 
         th = self.vcount // 2 
         for i in range(pyhdc.get_vector_width()):
             cnt = 0
-            for v in self.masked_vectors:
+            for v in csum_vectors:
                 if (v.get_bit(i)):
                     cnt += 1
             if (cnt >= th):
@@ -67,7 +75,8 @@ class Memory:
             if (min_score > score):
                 min_score = score
                 min_id = i
-        return min_score, min_id, lst
+                break
+        return min_score, min_id
 
 
 class Model:
@@ -77,30 +86,40 @@ class Model:
 
     def add(self, vec_image, val):
         classes = self.cl_mapper.get_class(val)
+        print ("\tassigning classes:", classes)
         for cl in classes:
             if cl not in self.bins.keys():
-                self.bins[cl] = Memory
+                self.bins[cl] = Memory()
             self.bins[cl].add(vec_image.vec)
     
     def build(self):
         print ("Bulding the model:", len(self.bins.keys()), "clusters")
+        to_adjust = 0
         for i, cl in enumerate(sorted(self.bins.keys())):
-            print ("Building memory for cluster", cl, "(", i, "/", len(self.bins.keys()), ")")
-            self.bins[cl].build()
+            if (self.bins[cl].vcount > to_adjust): to_adjust = self.bins[cl].vcount
+        if (to_adjust % 2 == 0): to_adjust += 1
+        print ("Adjusting memory bins to:", to_adjust)
+        for i, cl in enumerate(sorted(self.bins.keys())):
+            print ("Building memory for cluster", cl, "(", i, "/", len(self.bins.keys()), ")")    
+            self.bins[cl].build(-1)
 
     def infer(self, vec_image):
         clusters = []
         scores = []
+        
         for i, cl in enumerate(sorted(self.bins.keys())):
-            print ("Looking for a vector in memory", cl, "(", i, "/", len(self.bins.keys()), ")")
+            print ("\tLooking for a vector in memory", cl, "(", i, "/", len(self.bins.keys()), ")")
             score, id_ = self.bins[cl].find(vec_image.vec)
             print ("\tScore:", score, "\tbasis id:", id_)
-            
-            cluster.append(cl)
+  
+            clusters.append(cl)
             scores.append(score)
 
         result = sorted(zip(scores, clusters))
-        return self.cl_mapper.get_val_range([result[0][1]])
+        #print ("\tresults:", zip(scores, clusters))
+        print ("\tcluster:", result[0][1])
+
+        return self.cl_mapper.get_val_range([result[0][1]]), result[0]
 
 
 if __name__ == '__main__':
@@ -112,7 +131,7 @@ if __name__ == '__main__':
     parser.add_argument('--width',
                         type=float,
                         required=False,
-                        default=0.05)
+                        default=0.2)
     parser.add_argument('--mode',
                         type=int,
                         required=False,
@@ -122,10 +141,8 @@ if __name__ == '__main__':
 
     print ("Opening", args.base_dir)
 
-    TZ_mapper = ClassMapper(0.01, 0.005)
+    TZ_mapper = ClassMapper(0.001, 0.001)
     TZModel = Model(TZ_mapper)
-
-    #sys.exit()
 
     sl_npz = np.load(args.base_dir + '/recording.npz')
     cloud          = sl_npz['events']
@@ -146,15 +163,17 @@ if __name__ == '__main__':
     first_ts = cloud[0][0]
     last_ts = cloud[-1][0]
 
+    vis_dir   = os.path.join(args.base_dir, 'vis')
+    pydvs.replace_dir(vis_dir)
 
-    fake_images = []
-    for i, time in enumerate(gt_ts):
-        x = pyhdc.LBV()
-        x.rand()
-        fake_images.append(x)
+    #fake_images = []
+    #for i, time in enumerate(gt_ts):
+    #    x = pyhdc.LBV()
+    #    x.rand()
+    #    fake_images.append(x)
 
 
-    m = Memory()
+    #m = Memory()
     for i, time in enumerate(gt_ts):
         if (time > last_ts or time < first_ts):
             continue
@@ -162,27 +181,80 @@ if __name__ == '__main__':
         print ("Training:", i, "/", len(gt_ts))
 
         sl, _ = pydvs.get_slice(cloud, idx, time, args.width, args.mode, discretization)
-        #TZModel.add(VecImageCloud((180, 240), sl), gT_z[i])
+        vec_image = VecImageCloud((180, 240), sl)
+        
+        #vec_image.x_err = gQ_y[i] * 10000
+        #vec_image.y_err = gQ_y[i] * 10000
+        #vec_image.z_err = gQ_y[i] * 10000
+        #vec_image.vec = vec_image.image2vec()
 
-        
-        m.add(VecImageCloud((180, 240), sl).vec)
-        
+        TZModel.add(vec_image, gQ_y[i])
+        #m.add(vec_image.vec)
         #m.add(fake_images[i])
 
-        if (i > 10):
+        if (i > 500):
             break
 
-    m.build()
-    
+    TZModel.build()
+    #m.build()
+
     print ("\n\n\n------------")
+    
+    x_axis = []
+    gt_val = []
+    
+    hash_x = []
+    hash_y = []
+    hash_z = []
+    hash_e = []
+    hash_a = []
+
+    lo_val = []
+    hi_val = []
+
     for i, time in enumerate(gt_ts):
         if (time > last_ts or time < first_ts):
             continue
-
-
         sl, _ = pydvs.get_slice(cloud, idx, time, args.width, args.mode, discretization)
-        score, id_, lst = m.find(VecImageCloud((180, 240), sl).vec)
+        vec_image = VecImageCloud((180, 240), sl)
+
+        #vec_image.x_err = gQ_y[i] * 10000
+        #vec_image.y_err = gQ_y[i] * 10000
+        #vec_image.z_err = gQ_y[i] * 10000
+        #vec_image.vec = vec_image.image2vec()
+
+        print ("\nInference", i, ":")
+        (lo, hi), [score, cl] = TZModel.infer(vec_image)
+
+        x_axis.append(i)
+        gt_val.append(gQ_y[i])
+        
+        hash_x.append(vec_image.x_err)
+        hash_y.append(vec_image.y_err)
+        hash_z.append(vec_image.z_err)
+        hash_e.append(vec_image.e_count)
+        hash_a.append(vec_image.nz_avg)
+
+        lo_val.append(lo)
+        hi_val.append(hi)
+
+        #score, id_, lst = m.find(vec_image.vec)
+
+        #cv2.imwrite(os.path.join(vis_dir, 'frame_' + str(i).rjust(10, '0') + '.png'), vec_image.vis * 255)
 
         #score, id_ = m.find(fake_images[i])
-        print (i, ":", score, id_, "|", lst)
+        #print (i, ":", score, id_)
 
+    fig, axs = plt.subplots(6, 1)
+
+    axs[0].plot(x_axis, gt_val)
+    axs[0].plot(x_axis, lo_val) 
+    axs[0].plot(x_axis, hi_val)
+
+    axs[1].plot(x_axis, hash_x)
+    axs[2].plot(x_axis, hash_y)
+    axs[3].plot(x_axis, hash_z)
+    axs[4].plot(x_axis, hash_e)
+    axs[5].plot(x_axis, hash_a)
+
+    plt.show()
