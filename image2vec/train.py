@@ -192,7 +192,7 @@ if __name__ == '__main__':
         #m.add(vec_image.vec)
         #m.add(fake_images[i])
 
-        if (i > 500):
+        if (i > 1500):
             break
 
     TZModel.build()

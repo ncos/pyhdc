@@ -4,6 +4,7 @@ import argparse
 import numpy as np
 import os, sys, signal, math, time
 import matplotlib.colors as colors
+import random
 
 import pydvs, pyhdc, cv2
 
@@ -36,6 +37,7 @@ def safeHamming(v1, v2):
 
 class VecImageCloud:
     def __init__(self, shape, cloud):
+        random.seed()
         self.shape = shape
         self.width = 0
         if (cloud.shape[0] > 0):
@@ -77,6 +79,7 @@ class VecImageCloud:
 
 
     def num2vec(self, num, size):
+        if (np.isnan(num)): return np.nan
         n = int(num * size / 1)
         min_ = -size // 2
         n_bits = n - min_
@@ -87,32 +90,56 @@ class VecImageCloud:
 
     def image2vec(self, dgrad=None):
         ret = pyhdc.LBV()
-        params = [self.x_err, self.y_err, self.z_err] 
-        #params = [self.x_err, self.y_err, self.z_err, self.e_count] 
+        #params = [self.x_err, self.y_err, self.z_err] 
+        params = [self.x_err, self.y_err, self.z_err, self.e_count] 
 
-        step = 30
+        step = 50
         for i in range(self.dvs_img.shape[0] // step):
             for j in range(self.dvs_img.shape[1] // step):
                 dvs_img_ = np.copy(self.dvs_img[i:i+step,j:j+step,:])
                 dgrad_ = np.zeros((dvs_img_.shape[0], dvs_img_.shape[1], 2), dtype=np.float32)
                 x_err, y_err, yaw_err, z_err, e_count, nz_avg = \
                         pydvs.dvs_flow_err(dvs_img_, dgrad_)
+                
+                if (e_count < 20):
+                    x_err = np.nan
+                    y_err = np.nan
+                    z_err = np.nan
 
-                params.append(x_err / 5)
-                params.append(y_err / 5)
-                params.append(z_err / 500)
-        
+                e_count /= (6250 / (self.dvs_img.shape[0] * self.dvs_img.shape[1])) * step * step
+                e_count -= 1
+
+                #params.append(x_err / 5)
+                #params.append(y_err / 5)
+                #params.append(z_err / 500)
+                #params.append(e_count)
+
         print (self.dvs_img.shape)
         print (params)
+        print (len(params))
 
-        chunk_size = 32
+        chunk_size = 100
         to_encode = [self.num2vec(p, chunk_size) for p in params]
         scale = 1
 
+        #ret.rand()
         for i, n_bits in enumerate(to_encode):
             start_offset = i * chunk_size * scale
-            for j in range(n_bits * scale):
-                ret.flip(start_offset + j)
+            end_chunk = (i + 1) * chunk_size * scale
+            if (np.isnan(params[i])):
+                continue
+            #    for j in range(start_offset, end_chunk):
+            #        if (random.random() > 0.5):
+            #            ret.flip(j)
+            #    continue
+
+            for j in range(start_offset, end_chunk):
+                if (j <= n_bits + start_offset and not ret.get_bit(j)):
+                    ret.flip(j)
+                if (j > n_bits + start_offset and ret.get_bit(j)):
+                    ret.flip(j)
+            #for j in range(n_bits * scale):
+            #    ret.flip(start_offset + j)
 
         return ret
 
