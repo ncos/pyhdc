@@ -218,7 +218,6 @@ void permute_chunk(LBV *v, const uint8_t p[][2], uint32_t id, LBV *ref) {
         const uint32_t source  = ref->data[id];
         const uint32_t target  = ref->data[chunk_id];
 
-
         const uint32_t mask = (((source >> (BIT_WIDTH - i - 1)) ^ (target >> (BIT_WIDTH - bit_id - 1))) & 0x1) << (BIT_WIDTH - i - 1);
         v->data[id] ^= mask;
     }

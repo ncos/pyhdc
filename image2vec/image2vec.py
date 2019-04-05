@@ -46,6 +46,9 @@ class VecImageCloud:
         # Compute images according to the model
         self.dvs_img = pydvs.dvs_img(cloud, self.shape, model=[0, 0, 0, 0], 
                                      scale=1, K=None, D=None)
+        #self.dvs_img[:,:,1] = cv2.medianBlur(self.dvs_img[:,:,1], 5)
+        self.dvs_img[:,:,1] = cv2.GaussianBlur(self.dvs_img[:,:,1], (7,7), 0)
+
         #dvs_img = np.copy(dvs_img[:50,:50,:])
         
         # Compute errors on the images
@@ -59,28 +62,37 @@ class VecImageCloud:
         self.e_count -= 1
         self.nz_avg /= 4
         self.nz_avg -= 1
+        
+        self.p_count = np.sum(self.dvs_img[:,:,0]) / 20000
+        self.n_count = np.sum(self.dvs_img[:,:,2]) / 30000
+        self.g_count = self.p_count + self.n_count / 50000
+        self.p_count -= 1
+        self.n_count -= 1
+        self.g_count -= 1
+
+        self.vec = self.image2vec(dgrad)
+        return
 
         #print (self.x_err, self.y_err, self.z_err, self.yaw_err, self.e_count, self.nz_avg)
 
         # Visualization
-        #c_img = self.dvs_img[:,:,0] + self.dvs_img[:,:,2]
-        #c_img = np.dstack((c_img, c_img, c_img)) * 0.5 / (self.nz_avg + 1e-3)
+        c_img = self.dvs_img[:,:,0] + self.dvs_img[:,:,2]
+        c_img = np.dstack((c_img, c_img, c_img)) * 0.5 / (self.nz_avg + 1e-3)
 
-        #dvs_img[:,:,1] *= 1.0 / self.width
-        #t_img = np.dstack((dvs_img[:,:,1], dvs_img[:,:,1], dvs_img[:,:,1]))
-        #G_img = colorizeImage(dgrad[:,:,0], dgrad[:,:,1])
+        self.dvs_img[:,:,1] *= 1.0 / self.width
+        t_img = np.dstack((self.dvs_img[:,:,1], self.dvs_img[:,:,1], self.dvs_img[:,:,1]))
+        G_img = colorizeImage(dgrad[:,:,0], dgrad[:,:,1])
 
-        self.vec = self.image2vec(dgrad)        
-        #self.vis = np.hstack((t_img, G_img))
+        self.vis = np.hstack((t_img, G_img))
 
-        #cv2.namedWindow('GUI', cv2.WINDOW_NORMAL)
-        #cv2.imshow('GUI', np.hstack((c_img, t_img, G_img)))
-        #cv2.waitKey(0) 
+        cv2.namedWindow('GUI', cv2.WINDOW_NORMAL)
+        cv2.imshow('GUI', np.hstack((t_img, G_img)))
+        cv2.waitKey(0) 
 
 
     def num2vec(self, num, size):
         if (np.isnan(num)): return np.nan
-        n = int(num * size / 1)
+        n = int(num * size / 2)
         min_ = -size // 2
         n_bits = n - min_
         if (n_bits < 0): n_bits = 0
@@ -90,37 +102,38 @@ class VecImageCloud:
 
     def image2vec(self, dgrad=None):
         ret = pyhdc.LBV()
-        #params = [self.x_err, self.y_err, self.z_err] 
-        params = [self.x_err, self.y_err, self.z_err, self.e_count] 
+        params = [self.x_err, self.y_err, self.z_err] 
+        #params = [self.x_err, self.y_err, self.z_err, self.g_count] 
+        #params = [self.x_err, self.y_err, self.z_err, self.x_err, self.y_err, self.z_err, self.e_count, self.p_count, self.n_count, self.g_count] 
 
-        step = 50
-        for i in range(self.dvs_img.shape[0] // step):
-            for j in range(self.dvs_img.shape[1] // step):
-                dvs_img_ = np.copy(self.dvs_img[i:i+step,j:j+step,:])
-                dgrad_ = np.zeros((dvs_img_.shape[0], dvs_img_.shape[1], 2), dtype=np.float32)
-                x_err, y_err, yaw_err, z_err, e_count, nz_avg = \
-                        pydvs.dvs_flow_err(dvs_img_, dgrad_)
-                
-                if (e_count < 20):
-                    x_err = np.nan
-                    y_err = np.nan
-                    z_err = np.nan
+        #step = 50
+        #for i in range(self.dvs_img.shape[0] // step):
+        #    for j in range(self.dvs_img.shape[1] // step):
+        #        dvs_img_ = np.copy(self.dvs_img[i:i+step,j:j+step,:])
+        #        dgrad_ = np.zeros((dvs_img_.shape[0], dvs_img_.shape[1], 2), dtype=np.float32)
+        #        x_err, y_err, yaw_err, z_err, e_count, nz_avg = \
+        #                pydvs.dvs_flow_err(dvs_img_, dgrad_)
+        #        
+        #        if (e_count < 20):
+        #            x_err = np.nan
+        #            y_err = np.nan
+        #            z_err = np.nan
 
-                e_count /= (6250 / (self.dvs_img.shape[0] * self.dvs_img.shape[1])) * step * step
-                e_count -= 1
+        #        e_count /= (6250 / (self.dvs_img.shape[0] * self.dvs_img.shape[1])) * step * step
+        #        e_count -= 1
 
                 #params.append(x_err / 5)
                 #params.append(y_err / 5)
                 #params.append(z_err / 500)
                 #params.append(e_count)
 
-        print (self.dvs_img.shape)
-        print (params)
-        print (len(params))
+        #print (self.dvs_img.shape)
+        #print (params)
+        #print (len(params))
 
-        chunk_size = 100
+        chunk_size = 200
         to_encode = [self.num2vec(p, chunk_size) for p in params]
-        scale = 1
+        scale = 2
 
         #ret.rand()
         for i, n_bits in enumerate(to_encode):
@@ -128,18 +141,15 @@ class VecImageCloud:
             end_chunk = (i + 1) * chunk_size * scale
             if (np.isnan(params[i])):
                 continue
-            #    for j in range(start_offset, end_chunk):
-            #        if (random.random() > 0.5):
-            #            ret.flip(j)
-            #    continue
+
+            #for j in range(start_offset, n_bits + start_offset):
+            #    ret.flip(j)
 
             for j in range(start_offset, end_chunk):
                 if (j <= n_bits + start_offset and not ret.get_bit(j)):
                     ret.flip(j)
                 if (j > n_bits + start_offset and ret.get_bit(j)):
                     ret.flip(j)
-            #for j in range(n_bits * scale):
-            #    ret.flip(start_offset + j)
 
         return ret
 
