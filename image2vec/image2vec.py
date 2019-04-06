@@ -53,11 +53,20 @@ class VecImageCloud:
         
         # Compute errors on the images
         dgrad = np.zeros((self.dvs_img.shape[0], self.dvs_img.shape[1], 2), dtype=np.float32)
-        self.x_err, self.y_err, self.yaw_err, self.z_err, self.e_count, self.nz_avg = \
+        self.x_err2, self.y_err2, self.yaw_err, self.z_err2, self.e_count, self.nz_avg = \
             pydvs.dvs_flow_err(self.dvs_img, dgrad)
-        self.x_err /= 5
-        self.y_err /= 5
-        self.z_err /= 500
+
+        dgrad = np.zeros((self.dvs_img.shape[0], self.dvs_img.shape[1], 2), dtype=np.float32)
+        self.x_err, self.y_err, self.yaw_err, self.z_err, self.e_count, self.nz_avg = \
+            pydvs.dvs_err(self.dvs_img, dgrad)
+
+        self.x_err *= 10
+        self.y_err *= 10
+        self.z_err /= 5
+
+        self.x_err2 /= 5
+        self.y_err2 /= 5
+        self.z_err2 /= 500
         self.e_count /= 6250
         self.e_count -= 1
         self.nz_avg /= 4
@@ -102,7 +111,11 @@ class VecImageCloud:
 
     def image2vec(self, dgrad=None):
         ret = pyhdc.LBV()
-        params = [self.x_err, self.y_err, self.z_err] 
+        #params = [self.z_err / 2] 
+        #params = [self.x_err2, self.y_err2, self.x_err, self.y_err]
+        params = [self.x_err2, self.y_err2, self.x_err, self.y_err, self.z_err, self.z_err2] 
+        #params = [self.x_err2, self.y_err2, self.x_err, self.y_err, self.z_err, self.z_err2, self.e_count] 
+        #params = [self.x_err2, self.y_err2, self.z_err2] 
         #params = [self.x_err, self.y_err, self.z_err, self.g_count] 
         #params = [self.x_err, self.y_err, self.z_err, self.x_err, self.y_err, self.z_err, self.e_count, self.p_count, self.n_count, self.g_count] 
 
@@ -131,7 +144,7 @@ class VecImageCloud:
         #print (params)
         #print (len(params))
 
-        chunk_size = 200
+        chunk_size = 500
         to_encode = [self.num2vec(p, chunk_size) for p in params]
         scale = 2
 
