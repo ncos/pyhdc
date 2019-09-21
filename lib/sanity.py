@@ -15,9 +15,9 @@ print ("Vector a:")
 print (a)
 print ()
 
-# There are 'x' and 'y' permutations; the seed (first one) is generated separately 
-# and independently for both; the second value is 'order' - how many times the 
-# seed permutation should be permuted with itself. All permutations are precomputed, so 
+# There are 'x' and 'y' permutations; the seed (first one) is generated separately
+# and independently for both; the second value is 'order' - how many times the
+# seed permutation should be permuted with itself. All permutations are precomputed, so
 # only up to 'pyhdc.get_max_order' orders can be used.
 print ("P0:")
 print (pyhdc.permutation_to_str('x', 0))
@@ -26,11 +26,10 @@ print ("P1:")
 print (pyhdc.permutation_to_str('x', 1))
 print ()
 
-
 def test_permute(v_, axis, order, times):
     v = pyhdc.LBV()
     v.xor(v_) # copy v_ to v
-    
+
     print ("v permuted with P" + axis + str(order), times, "time(s)")
     print (v)
     for i in range(times):
@@ -95,10 +94,10 @@ def test_bitmanip(v_):
     test_nbits = v.count()
     print (v)
     t3_result = (nbits == test_nbits)
-    print ("Passed:", t3_result, "true value = ", 
+    print ("Passed:", t3_result, "true value = ",
            nbits, "result = ", test_nbits)
     return t1_result & t2_result & t3_result
-    
+
 
 passed = True
 passed &= test_permute(a, 'x', 0, 1)
