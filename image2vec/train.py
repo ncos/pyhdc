@@ -3,7 +3,7 @@
 import argparse
 import numpy as np
 import os, sys, shutil, signal, glob, time
-from mpl_toolkits.mplot3d import Axes3D
+#from mpl_toolkits.mplot3d import Axes3D
 import matplotlib.pyplot as plt
 import matplotlib.gridspec as grd
 import scipy
@@ -61,8 +61,8 @@ if __name__ == '__main__':
     first_ts = cloud[0][0]
     last_ts = cloud[-1][0]
 
-    vis_dir   = os.path.join(args.base_dir, 'vis')
-    pydvs.replace_dir(vis_dir)
+    #vis_dir   = os.path.join(args.base_dir, 'vis')
+    #pydvs.replace_dir(vis_dir)
  
 
     gQ_y = scipy.ndimage.median_filter(gQ_y, 11)
@@ -85,7 +85,7 @@ if __name__ == '__main__':
             print ("Training:", i, "/", len(gt_ts))
 
         sl, _ = pydvs.get_slice(cloud, idx, t, args.width, args.mode, discretization)
-        
+
         start = time.time()
         vec_image = VecImageCloud((180, 240), sl)
         end = time.time()
