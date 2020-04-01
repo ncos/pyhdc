@@ -63,7 +63,6 @@ if __name__ == '__main__':
 
     #vis_dir   = os.path.join(args.base_dir, 'vis')
     #pydvs.replace_dir(vis_dir)
- 
 
     gQ_y = scipy.ndimage.median_filter(gQ_y, 11)
     gT_x = scipy.ndimage.median_filter(gT_x, 11)
@@ -76,7 +75,7 @@ if __name__ == '__main__':
     for i, t in enumerate(gt_ts):
         if (t > last_ts or t < first_ts):
             continue
-        
+
         if (i > 2000): break
         #if (i > len(gt_ts) / 5 and i < 4 * len(gt_ts) / 5): continue
 
@@ -91,7 +90,6 @@ if __name__ == '__main__':
         end = time.time()
         im2vec_time += end - start
 
-        
         start = time.time()
         QYModel.add(vec_image, gQ_y[i])
         end = time.time()
@@ -125,6 +123,7 @@ if __name__ == '__main__':
     gt_tx = []
     gt_tz = []
     gt_qy = []
+    timestamps = []
 
     hash_x = []
     hash_y = []
@@ -149,7 +148,7 @@ if __name__ == '__main__':
         if (t > last_ts or t < first_ts):
             continue
         sl, _ = pydvs.get_slice(cloud, idx, t, args.width, args.mode, discretization)
-        
+
         start = time.time()
         vec_image = VecImageCloud((180, 240), sl)
         end = time.time()
@@ -157,19 +156,19 @@ if __name__ == '__main__':
 
         if (i % 100 == 0):
             print ("Inference:", i, "/", len(gt_ts))
-        
+
         start = time.time()
         (lo, hi), [score, cl] = QYModel.infer(vec_image)
         end = time.time()
         infer_time += end - start
         lo_qy.append(lo)
         hi_qy.append(hi)
+        timestamps.append(t)
 
-        
         (lo, hi), [score, cl] = TXModel.infer(vec_image)
         lo_tx.append(lo)
         hi_tx.append(hi)
-        
+
         (lo, hi), [score, cl] = TZModel.infer(vec_image)
         lo_tz.append(lo)
         hi_tz.append(hi)
@@ -178,7 +177,7 @@ if __name__ == '__main__':
         gt_tx.append(gT_x[i])
         gt_tz.append(gT_z[i])
         gt_qy.append(gQ_y[i])
-        
+
         hash_x.append(vec_image.x_err)
         hash_y.append(vec_image.y_err)
         hash_z.append(vec_image.z_err)
@@ -216,6 +215,9 @@ if __name__ == '__main__':
     Z_qy = np.transpose(np.array(QYModel.infer_db))
 
 
+    # NOTE: in the default preprocessed MVSEC dataset, egomotion (Tx-z / Qx-z)
+    # is reported as transformation over 1/40th of a second. All egomotion values need to
+    # be divided by 1/40 to compute the velocity
     gt_qy = np.array(gt_qy) * 40
     #gt_qy = scipy.ndimage.median_filter(gt_qy, 3)
     lo_qy = scipy.ndimage.median_filter(lo_qy, 21) * 40
@@ -235,14 +237,15 @@ if __name__ == '__main__':
     l_lo = np.sqrt(lo_tz * lo_tz + lo_tx * lo_tx)
     l_hi = np.sqrt(hi_tz * hi_tz + hi_tx * hi_tx)
 
-    x_axis = np.array(x_axis) / 40.0
+    x_axis = np.array(timestamps)
+    x_axis -= x_axis[0]
 
     l_gt = scipy.ndimage.median_filter(l_gt, 51)
     for i in range(len(gt_tz)):
         if (l_lo[i] != 0):
             lo_tx[i] *= l_gt[i] / l_lo[i]
             lo_tz[i] *= l_gt[i] / l_lo[i]
-        
+
         if (l_hi[i] != 0):
             hi_tx[i] *= l_gt[i] / l_hi[i]
             hi_tz[i] *= l_gt[i] / l_hi[i]
@@ -272,11 +275,11 @@ if __name__ == '__main__':
 
     #fig = plt.figure()
     #ax = fig.gca(projection='3d')
-    #surf = ax.plot_surface(X, Y, Z, linewidth=0) 
+    #surf = ax.plot_surface(X, Y, Z, linewidth=0)
     #fig.tight_layout()
 
     #fig, axs = plt.subplots(6, 1)
-    
+
     #plt.rcParams['axes.formatter.useoffset'] = False
     fig = plt.figure()
     gs = grd.GridSpec(6, 2, height_ratios=[1,1,1,1,1,1], width_ratios=[50,1], hspace=0.5, wspace=0.02)
@@ -296,7 +299,7 @@ if __name__ == '__main__':
     ax2.spines['top'].set_visible(False)
     ax2.xaxis.set_ticks_position('bottom')
     ax2.yaxis.set_ticks_position('left')
-    ax2.plot(x_axis, lo_qy, 'orange', lw=2.0, label='Prediction') 
+    ax2.plot(x_axis, lo_qy, 'orange', lw=2.0, label='Prediction')
     ax2.plot(x_axis, gt_qy, 'k', lw=0.5, label='Ground Truth')
     ax2.set_xlim(min(x_axis), max(x_axis))
     ax2.set_ylabel('[rad / sec.]', bbox=box, labelpad=3)
@@ -319,7 +322,7 @@ if __name__ == '__main__':
     ax6.spines['top'].set_visible(False)
     ax6.xaxis.set_ticks_position('bottom')
     ax6.yaxis.set_ticks_position('left')
-    ax6.plot(x_axis, lo_tz, 'orange', lw=2.0, label='Prediction') 
+    ax6.plot(x_axis, lo_tz, 'orange', lw=2.0, label='Prediction')
     ax6.plot(x_axis, gt_tz, 'k', lw=0.5, label='Ground Truth')
     ax6.set_xlim(min(x_axis), max(x_axis))
     ax6.set_ylabel('[m / sec.]', bbox=box, labelpad=3)
@@ -342,7 +345,7 @@ if __name__ == '__main__':
     ax10.spines['top'].set_visible(False)
     ax10.xaxis.set_ticks_position('bottom')
     ax10.yaxis.set_ticks_position('left')
-    ax10.plot(x_axis, lo_tx, 'orange', lw=2.0, label='Prediction') 
+    ax10.plot(x_axis, lo_tx, 'orange', lw=2.0, label='Prediction')
     ax10.plot(x_axis, gt_tx, 'k', lw=0.5, label='Ground Truth')
     ax10.set_xlim(min(x_axis), max(x_axis))
     ax10.set_ylabel('[m / sec.]', bbox=box, labelpad=3)
@@ -351,7 +354,7 @@ if __name__ == '__main__':
 
     fig.align_ylabels()
 
-    
+
     #ax12 = plt.subplot(gs[12])
     #ax14 = plt.subplot(gs[14])
 
@@ -362,12 +365,12 @@ if __name__ == '__main__':
 
     #im1 = axs[2].imshow(Z_tz, origin='lower')
     #axs[3].plot(x_axis, gt_tz)
-    #axs[3].plot(x_axis, lo_tz) 
+    #axs[3].plot(x_axis, lo_tz)
     #axs[3].plot(x_axis, hi_tz)
 
     #im2 = axs[4].imshow(Z_tx, origin='lower')
     #axs[5].plot(x_axis, gt_tx)
-    #axs[5].plot(x_axis, lo_tx) 
+    #axs[5].plot(x_axis, lo_tx)
     #axs[5].plot(x_axis, hi_tx)
 
     #axs[2].plot(x_axis, hash_x)
