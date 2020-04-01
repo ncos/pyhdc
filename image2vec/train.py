@@ -215,23 +215,23 @@ if __name__ == '__main__':
     Z_qy = np.transpose(np.array(QYModel.infer_db))
 
 
-    # NOTE: in the default preprocessed MVSEC dataset, egomotion (Tx-z / Qx-z)
-    # is reported as transformation over 1/40th of a second. All egomotion values need to
-    # be divided by 1/40 to compute the velocity
-    gt_qy = np.array(gt_qy) * 40
+    avg_fps = 1.0 / np.mean(gt_ts[1:] - gt_ts[:-1])
+    print ("Average fps:", avg_fps)
+
+    gt_qy = np.array(gt_qy) * avg_fps
     #gt_qy = scipy.ndimage.median_filter(gt_qy, 3)
-    lo_qy = scipy.ndimage.median_filter(lo_qy, 21) * 40
-    hi_qy = scipy.ndimage.median_filter(hi_qy, 21) * 40
+    lo_qy = scipy.ndimage.median_filter(lo_qy, 21) * avg_fps
+    hi_qy = scipy.ndimage.median_filter(hi_qy, 21) * avg_fps
 
-    gt_tx = np.array(gt_tx) * 40
+    gt_tx = np.array(gt_tx) * avg_fps
     #gt_tx = scipy.ndimage.median_filter(gt_tx, 3)
-    lo_tx = scipy.ndimage.median_filter(lo_tx, 21) * 40
-    hi_tx = scipy.ndimage.median_filter(hi_tx, 21) * 40
+    lo_tx = scipy.ndimage.median_filter(lo_tx, 21) * avg_fps
+    hi_tx = scipy.ndimage.median_filter(hi_tx, 21) * avg_fps
 
-    gt_tz = np.array(gt_tz) * 40
+    gt_tz = np.array(gt_tz) * avg_fps
     #gt_tz = scipy.ndimage.median_filter(gt_tz, 3)
-    lo_tz = scipy.ndimage.median_filter(lo_tz, 21) * 40
-    hi_tz = scipy.ndimage.median_filter(hi_tz, 21) * 40
+    lo_tz = scipy.ndimage.median_filter(lo_tz, 21) * avg_fps
+    hi_tz = scipy.ndimage.median_filter(hi_tz, 21) * avg_fps
 
     l_gt = np.sqrt(gt_tz * gt_tz + gt_tx * gt_tx)
     l_lo = np.sqrt(lo_tz * lo_tz + lo_tx * lo_tx)
