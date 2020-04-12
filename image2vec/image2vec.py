@@ -36,7 +36,7 @@ def safeHamming(v1, v2):
 
 
 class VecImageCloud:
-    def __init__(self, shape, cloud):
+    def __init__(self, shape, cloud, direct=False):
         random.seed()
         self.shape = shape
         self.width = 0
@@ -44,21 +44,21 @@ class VecImageCloud:
             self.width = cloud[-1][0] - cloud[0][0]
 
         # Compute images according to the model
-        self.dvs_img = pydvs.dvs_img(cloud, self.shape, model=[0, 0, 0, 0], 
+        self.dvs_img = pydvs.dvs_img(cloud, self.shape, model=[0, 0, 0, 0],
                                      scale=1, K=None, D=None)
         #self.dvs_img[:,:,1] = cv2.medianBlur(self.dvs_img[:,:,1], 5)
         self.dvs_img[:,:,1] = cv2.GaussianBlur(self.dvs_img[:,:,1], (7,7), 0)
 
         #dvs_img = np.copy(dvs_img[:50,:50,:])
-        
+
         # Compute errors on the images
         dgrad = np.zeros((self.dvs_img.shape[0], self.dvs_img.shape[1], 2), dtype=np.float32)
         self.x_err2, self.y_err2, self.yaw_err, self.z_err2, self.e_count, self.nz_avg = \
             pydvs.dvs_flow_err(self.dvs_img, dgrad)
 
-        dgrad = np.zeros((self.dvs_img.shape[0], self.dvs_img.shape[1], 2), dtype=np.float32)
+        dgrad_ = np.zeros((self.dvs_img.shape[0], self.dvs_img.shape[1], 2), dtype=np.float32)
         self.x_err, self.y_err, self.yaw_err, self.z_err, self.e_count, self.nz_avg = \
-            pydvs.dvs_err(self.dvs_img, dgrad)
+            pydvs.dvs_err(self.dvs_img, dgrad_)
 
         self.x_err *= 10
         self.y_err *= 10
@@ -71,7 +71,7 @@ class VecImageCloud:
         self.e_count -= 1
         self.nz_avg /= 4
         self.nz_avg -= 1
-        
+
         self.p_count = np.sum(self.dvs_img[:,:,0]) / 20000
         self.n_count = np.sum(self.dvs_img[:,:,2]) / 30000
         self.g_count = self.p_count + self.n_count / 50000
@@ -79,7 +79,11 @@ class VecImageCloud:
         self.n_count -= 1
         self.g_count -= 1
 
-        self.vec = self.image2vec(dgrad)
+        if (direct):
+            self.vec = self.image2vec_direct(dgrad)
+        else:
+            self.vec = self.image2vec(dgrad)
+
         return
 
         #print (self.x_err, self.y_err, self.z_err, self.yaw_err, self.e_count, self.nz_avg)
@@ -96,7 +100,7 @@ class VecImageCloud:
 
         cv2.namedWindow('GUI', cv2.WINDOW_NORMAL)
         cv2.imshow('GUI', np.hstack((t_img, G_img)))
-        cv2.waitKey(0) 
+        cv2.waitKey(0)
 
 
     def num2vec(self, num, size):
@@ -111,13 +115,13 @@ class VecImageCloud:
 
     def image2vec(self, dgrad=None):
         ret = pyhdc.LBV()
-        #params = [self.z_err / 2] 
+        #params = [self.z_err / 2]
         #params = [self.x_err2, self.y_err2, self.x_err, self.y_err]
-        params = [self.x_err2, self.y_err2, self.x_err, self.y_err, self.z_err, self.z_err2] 
-        #params = [self.x_err2, self.y_err2, self.x_err, self.y_err, self.z_err, self.z_err2, self.e_count] 
-        #params = [self.x_err2, self.y_err2, self.z_err2] 
-        #params = [self.x_err, self.y_err, self.z_err, self.g_count] 
-        #params = [self.x_err, self.y_err, self.z_err, self.x_err, self.y_err, self.z_err, self.e_count, self.p_count, self.n_count, self.g_count] 
+        params = [self.x_err2, self.y_err2, self.x_err, self.y_err, self.z_err, self.z_err2]
+        #params = [self.x_err2, self.y_err2, self.x_err, self.y_err, self.z_err, self.z_err2, self.e_count]
+        #params = [self.x_err2, self.y_err2, self.z_err2]
+        #params = [self.x_err, self.y_err, self.z_err, self.g_count]
+        #params = [self.x_err, self.y_err, self.z_err, self.x_err, self.y_err, self.z_err, self.e_count, self.p_count, self.n_count, self.g_count]
 
         #step = 50
         #for i in range(self.dvs_img.shape[0] // step):
@@ -126,7 +130,7 @@ class VecImageCloud:
         #        dgrad_ = np.zeros((dvs_img_.shape[0], dvs_img_.shape[1], 2), dtype=np.float32)
         #        x_err, y_err, yaw_err, z_err, e_count, nz_avg = \
         #                pydvs.dvs_flow_err(dvs_img_, dgrad_)
-        #        
+        #
         #        if (e_count < 20):
         #            x_err = np.nan
         #            y_err = np.nan
@@ -167,6 +171,43 @@ class VecImageCloud:
         return ret
 
 
+    def image2vec_direct(self, dgrad):
+        # convert every pixel tp hbv
+        chunk_size = 500
+
+        # encode every individual pixel value with a vector
+        vectors = []
+        for i in range(dgrad.shape[0]):
+            for j in range(dgrad.shape[1]):
+                if (dgrad[i][j][0] == 0 or dgrad[i][j][1] == 0): continue
+
+                # encode first pixel value
+                tmp0 = pyhdc.LBV()
+                nbts0 = self.num2vec(dgrad[i][j][0] / 5, chunk_size)
+                for k in range(nbts0):
+                    tmp0.flip(k)
+                tmp0.permute('x', 0)
+
+                # encode second  pixel value
+                tmp1 = pyhdc.LBV()
+                nbts1 = self.num2vec(dgrad[i][j][1] / 5, chunk_size)
+                for k in range(nbts1):
+                    tmp1.flip(k)
+                tmp1.permute('y', 0)
+
+                # v = XOR(P_1(v0), P_2(v1))
+                tmp = pyhdc.LBV()
+                vectors.append(tmp)
+                vectors[-1].xor(tmp0)
+                vectors[-1].xor(tmp1)
+
+
+        # apply consensus sum on all vectors
+        ret = pyhdc.csum(vectors, '1')
+
+        return ret
+
+
 class ClassMapper:
     def __init__(self, bsize_, stride_):
         self.bsize = float(bsize_)
@@ -185,4 +226,3 @@ class ClassMapper:
     def get_val_range(self, classes):
         c = sorted(classes)
         return [c[-1] * self.stride, c[0] * self.stride + self.bsize]
-        

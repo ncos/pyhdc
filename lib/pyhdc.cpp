@@ -322,6 +322,86 @@ inline std::string perm_to_str(const uint8_t P[][2]) {
 }
 
 
+
+static PyObject* csum(PyObject* self, PyObject* args, PyObject *kwds) {
+    static char *kwlist[] = {"vlist", "mode", NULL};
+    const char *mode;
+    PyObject *vector_list;
+
+    if (!PyArg_ParseTupleAndKeywords(args, kwds, "O!s", kwlist,
+                                     &PyList_Type, &vector_list, &mode))
+        return NULL;
+
+
+    Py_ssize_t n_vectors = PyList_GET_SIZE(vector_list);
+    if (n_vectors > 65535) {
+        PyErr_SetString(PyExc_RuntimeError, "cannot perform consensus sum on more than 65535 vectors");
+        return NULL;
+    }
+
+    if (n_vectors == 0) {
+        PyErr_SetString(PyExc_RuntimeError, "cannot perform consensus sum on an empty input list");
+        return NULL;
+    }
+
+    uint8_t mode_id = 0;
+    if (mode[0] == '0') {
+        mode_id = 0;
+    } else if (mode[0] == '1') {
+        mode_id = 1;
+    } else if (mode[0] == 'r') {
+        mode_id = 2;
+    } else {
+        PyErr_SetString(PyExc_RuntimeError, "incorrect mode specified in consensus sum");
+        return NULL;
+    }
+
+
+    uint16_t *cnt_array = (uint16_t *)calloc(VECTOR_WIDTH, sizeof(uint16_t));
+
+    for (Py_ssize_t i = 0; i < n_vectors; ++i) {
+        PyObject *v_i_py = PyList_GetItem(vector_list, i);
+        LBV *v_i = (LBV *)v_i_py;
+
+        for (uint32_t chunk_id = 0; chunk_id < VECTOR_WIDTH / BIT_WIDTH; ++chunk_id) {
+            uint32_t offset = chunk_id * BIT_WIDTH;
+            const uint32_t chunk = v_i->data[chunk_id];
+            for (uint8_t bit_id = 0; bit_id < BIT_WIDTH; ++bit_id) {
+                if (((chunk >> (BIT_WIDTH - bit_id - 1)) & 0x1) == 1) {
+                    cnt_array[offset + bit_id] += 1;
+                }
+            }
+        }
+    }
+
+    PyObject *ret = PyObject_CallObject((PyObject *)&LBVType, args);
+    LBV *v = (LBV *)ret;
+
+    for (uint32_t chunk_id = 0; chunk_id < VECTOR_WIDTH / BIT_WIDTH; ++chunk_id) {
+        uint32_t offset = chunk_id * BIT_WIDTH;
+        for (uint8_t bit_id = 0; bit_id < BIT_WIDTH; ++bit_id) {
+            uint16_t n_ones = cnt_array[offset + bit_id];
+            if (n_vectors - n_ones < n_ones) {
+                const uint32_t mask = 0x1 << (BIT_WIDTH - bit_id - 1);
+                v->data[chunk_id] ^= mask;
+            }
+
+            if (n_vectors - n_ones == n_ones) {
+                if ((mode_id == 1) || (mode_id == 2 && rand() % 2 == 0)) {
+                    const uint32_t mask = 0x1 << (BIT_WIDTH - bit_id - 1);
+                    v->data[chunk_id] ^= mask;
+                }
+            }
+        }
+    }
+
+    free(cnt_array);
+    return Py_BuildValue("O", ret);
+}
+
+
+
+
 static PyObject* permutation_to_str(PyObject* self, PyObject* args, PyObject *kwds) {
     static char *kwlist[] = {"axis", "order", NULL};
     const char *axis;
@@ -376,6 +456,8 @@ static PyObject* get_vector_width(PyObject* self, PyObject* args, PyObject *kwds
 
 
 static PyMethodDef module_methods[] = {
+    {"csum", (PyCFunction)csum, METH_VARARGS|METH_KEYWORDS,
+     "return the consensus sum of a list of vectors"},
     {"permutation_to_str", (PyCFunction)permutation_to_str, METH_VARARGS|METH_KEYWORDS,
      "convert permutation to string, for printing"},
     {"get_max_order", (PyCFunction)get_max_order, METH_VARARGS|METH_KEYWORDS,

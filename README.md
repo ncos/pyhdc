@@ -50,6 +50,10 @@ and merge requests! The basic usage is:
 python3 image2vec/train.py --base_dir ./MVSEC/outdoor_day_1
 ```
 
+Add `--use-direct-encoding` to the command if you wish to enable 'direct pixel encoding' - where each pixel of the image
+is first converted to a vector and the final image encoding is a result of XOR, permutations and consensus sum
+operations on these vectors. This option is slower mainly because the algorithm is implemented in Python, without C backend.
+
 ## Citation
 If you use any of this code, please cite our publication in Science Robotics ([article](https://robotics.sciencemag.org/content/4/30/eaaw6736)).
 

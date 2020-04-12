@@ -19,15 +19,21 @@ if __name__ == '__main__':
     parser.add_argument('--base_dir',
                         type=str,
                         default='.',
-                        required=False)
+                        required=False,
+                        help='specify a folder with data')
     parser.add_argument('--width',
                         type=float,
                         required=False,
-                        default=0.2)
+                        default=0.2,
+                        help='the width of the time slice (sec.) to convert events to image')
     parser.add_argument('--mode',
                         type=int,
                         required=False,
                         default=0)
+
+    parser.add_argument('--use-direct-encoding',
+                        action='store_true',
+                        help='use direct pixel-to-vector image encoding')
 
     args = parser.parse_args()
 
@@ -80,13 +86,13 @@ if __name__ == '__main__':
         #if (i > len(gt_ts) / 5 and i < 4 * len(gt_ts) / 5): continue
 
 
-        if (i % 100 == 0):
+        if (i % 1 == 0):
             print ("Training:", i, "/", len(gt_ts))
 
         sl, _ = pydvs.get_slice(cloud, idx, t, args.width, args.mode, discretization)
 
         start = time.time()
-        vec_image = VecImageCloud((180, 240), sl)
+        vec_image = VecImageCloud((180, 240), sl, args.use_direct_encoding)
         end = time.time()
         im2vec_time += end - start
 
@@ -147,14 +153,15 @@ if __name__ == '__main__':
     for i, t in enumerate(gt_ts):
         if (t > last_ts or t < first_ts):
             continue
+
         sl, _ = pydvs.get_slice(cloud, idx, t, args.width, args.mode, discretization)
 
         start = time.time()
-        vec_image = VecImageCloud((180, 240), sl)
+        vec_image = VecImageCloud((180, 240), sl, args.use_direct_encoding)
         end = time.time()
         im2vec_time += end - start
 
-        if (i % 100 == 0):
+        if (i % 10 == 0):
             print ("Inference:", i, "/", len(gt_ts))
 
         start = time.time()
@@ -178,14 +185,14 @@ if __name__ == '__main__':
         gt_tz.append(gT_z[i])
         gt_qy.append(gQ_y[i])
 
-        hash_x.append(vec_image.x_err)
-        hash_y.append(vec_image.y_err)
-        hash_z.append(vec_image.z_err)
+        #hash_x.append(vec_image.x_err)
+        #hash_y.append(vec_image.y_err)
+        #hash_z.append(vec_image.z_err)
         #hash_e.append(vec_image.e_count)
         #hash_a.append(vec_image.nz_avg)
         #hash_p.append(vec_image.p_count)
         #hash_n.append(vec_image.n_count)
-        hash_g.append(vec_image.g_count)
+        #hash_g.append(vec_image.g_count)
 
         perf_cnt += 1.0
 

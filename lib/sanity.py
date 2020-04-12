@@ -26,6 +26,44 @@ print ("P1:")
 print (pyhdc.permutation_to_str('x', 1))
 print ()
 
+
+
+
+def test_csum(n=101, mode='1'):
+    print ("Csum test")
+
+    v = [pyhdc.LBV() for i in range(n)]
+    for i in range(n):
+        v[i].rand()
+
+    res = pyhdc.csum(v, mode)
+
+    res_ref = pyhdc.LBV()
+    th = len(v) / 2.0
+    for i in range(pyhdc.get_vector_width()):
+        cnt = 0
+        for v_ in v:
+            if (v_.get_bit(i)):
+                cnt += 1
+        if (abs(cnt - th) < 1e-3):
+            if (mode == '0'):
+                continue
+            if (mode == '1'):
+                res_ref.flip(i)
+                continue
+            if (mode == 'r' and random.choice([True, False])):
+                res_ref.flip(i)
+                continue
+
+        if (cnt > th):
+            res_ref.flip(i)
+
+    res_ref.xor(res);
+    print ("Passed:", res_ref.is_zero())
+    print ()
+    return res_ref.is_zero()
+
+
 def test_permute(v_, axis, order, times):
     v = pyhdc.LBV()
     v.xor(v_) # copy v_ to v
@@ -100,6 +138,8 @@ def test_bitmanip(v_):
 
 
 passed = True
+passed &= test_csum(101, '0')
+passed &= test_csum(101, '1')
 passed &= test_permute(a, 'x', 0, 1)
 passed &= test_permute(a, 'y', 1, 1)
 passed &= test_permute(a, 'x', 0, 100)

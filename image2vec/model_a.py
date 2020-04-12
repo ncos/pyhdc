@@ -32,7 +32,7 @@ class Memory_a:
 
         random_vectors = []
         if (to_adjust > self.vcount):
-            x = pyhdc.LBV() 
+            x = pyhdc.LBV()
             x.rand()
             random_vectors.append(x)
 
@@ -42,7 +42,7 @@ class Memory_a:
             self.masked_vectors = []
             return
 
-        th = self.vcount // 2 
+        th = self.vcount // 2
         for i in range(pyhdc.get_vector_width()):
             cnt = 0
             for v in csum_vectors:
@@ -65,13 +65,13 @@ class Memory_a:
 
         min_score = pyhdc.get_vector_width()
         min_id = -1
-        
+
         for i, b in enumerate(self.basis_vectors):
             tmp = pyhdc.LBV()
             tmp.xor(mem_test)
             tmp.xor(b)
             score = tmp.count()
-            
+
             if (min_score > score):
                 min_score = score
                 min_id = i
